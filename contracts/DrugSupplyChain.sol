@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 contract DrugSupplyChain is AccessControl {
     //The contract is for tracking Supply Chain system of Drugs
@@ -17,6 +18,8 @@ contract DrugSupplyChain is AccessControl {
     mapping(address => bool) public isFrozen; //Mapping to check if an address is frozen
     mapping(bytes32 => ReturnRequest) public returnRequests; // Batch Return Request tracking
     uint256 public batchCount; //Counter for the number of batches created
+
+    AggregatorV3Interface internal dataFeed;
 
     //Enum for Batch Status External
     enum BatchStatus {
@@ -169,7 +172,37 @@ contract DrugSupplyChain is AccessControl {
 
     //Constructor to set the deployer as the DEFAULT_ADMIN_ROLE
     constructor() {
+        dataFeed = AggregatorV3Interface(
+            0x694AA1769357215DE4FAC081bf1f309aDC325306
+        );
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    function getDataFeedLatestAnswer() internal view returns (uint256) {
+        (
+            ,
+            /* uint80 roundId */ int256 answer /*uint256 startedAt*/ /*uint256 updatedAt*/ /*uint80 answeredInRound*/,
+            ,
+            ,
+
+        ) = dataFeed.latestRoundData();
+        return uint256(answer);
+    }
+
+    //IMPORTANT -> THE _usdAMount PASSED MUST BE MULTIPLIESD BY 1e18
+    //A very important function to be called for calculating Ethereum from USD entered
+    //The function will be first called before any payment is initiated
+    //As the inputs are in USD and the transactions are done in eth so we need to convert that USD in Eth
+    //First we will convergt USD in ETh then we call any other function
+    function calculateEthfromUSD(
+        uint256 _usdAmount
+    ) internal returns (uint256) {
+        uint256 price = getDataFeedLatestAnswer();
+        require(price > 0, "Invalid Price Feed");
+        require(_usdAmount > 0, "Sent Amount is less");
+
+        uint256 amountEth = (_usdAmount * 1e8) / price;
+        return amountEth;
     }
 
     //Granting Roles to the address according to their working in the supply chain
