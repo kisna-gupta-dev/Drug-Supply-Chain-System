@@ -1,10 +1,11 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import "@chainlink\contracts\src\v0.8\automation\interfaces\AutomationCompatibleInterface.sol";
 
-contract DrugSupplyChain is AccessControl {
+contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //The contract is for tracking Supply Chain system of Drugs
     //To ensure the integrity and authenticity of drugs in the supply chain
 
@@ -17,6 +18,7 @@ contract DrugSupplyChain is AccessControl {
     mapping(bytes32 => Batch) public batchIdToBatch; //Mapping of batchId to Batch struct for quick access
     mapping(address => bool) public isFrozen; //Mapping to check if an address is frozen
     mapping(bytes32 => ReturnRequest) public returnRequests; // Batch Return Request tracking
+    ReturnRequest[] public pendingRequests; //Array to store pending return requests
     uint256 public batchCount; //Counter for the number of batches created
 
     AggregatorV3Interface internal dataFeed;
@@ -50,6 +52,7 @@ contract DrugSupplyChain is AccessControl {
         uint256 MRP; //Maximum Retail Price
     }
     struct ReturnRequest {
+        bytes32 batchId; // The ID of the batch being returned
         address requester;
         string reason;
         bool approved;
@@ -171,11 +174,55 @@ contract DrugSupplyChain is AccessControl {
     }
 
     //Constructor to set the deployer as the DEFAULT_ADMIN_ROLE
-    constructor() {
-        dataFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        );
+    constructor(address _priceFeedAddress) {
+        dataFeed = AggregatorV3Interface(_priceFeedAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
+    //ChainLink Automation functions
+    //This is used to check if any request is pending for approval for more than 3 days
+    function checkUpkeep(
+        bytes calldata checkData
+    )
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        for (uint256 i = 0; i < pendingRequests.length; i++) {
+            ReturnRequest memory request = pendingRequests[i];
+
+            if (
+                block.timestamp - request.timestamp > 3 days &&
+                !request.approved &&
+                !request.refunded
+            ) {
+                upkeepNeeded = true;
+                performData = abi.encode(request.batchId);
+                return (upkeepNeeded, performData);
+            }
+        }
+        return (false, "");
+    }
+
+    function performUpkeep(bytes calldata performData) external override {
+        bytes32 batchId = abi.decode(performData, (bytes32));
+        require(
+            returnRequests[batchId].requester != address(0),
+            "No return request found"
+        );
+        if (hasRole(DISTRIBUTOR_ROLE, returnRequests[batchId].requester)) {
+            payable(returnRequests[batchId].requester).transfer(
+                batchIdToBatch[batchId].productPrice
+            );
+        } else {
+            payable(returnRequests[batchId].requester).transfer(
+                batchIdToBatch[batchId].price
+            );
+        }
+        returnRequests[batchId].approved = true;
+        returnRequests[batchId].refunded = true;
+        batchIdToBatch[batchId].status = "Return request approved and refunded";
     }
 
     function getDataFeedLatestAnswer() internal view returns (uint256) {
@@ -453,14 +500,29 @@ contract DrugSupplyChain is AccessControl {
 
         returnRequests[_batchId].approved = true;
         returnRequests[_batchId].refunded = true;
-
+        removePendingRequest(_batchId);
         emit RequestApproved(
+            _batchId,
             requester,
             returnRequests[_batchId].reason,
             true,
             block.timestamp,
             true
         );
+    }
+
+    function removePendingRequest(uint256 _batchId) internal {
+        for (uint256 i = 0; i < pendingRequests.length; i++) {
+            if (pendingRequests[i] == returnRequests[_batchId]) {
+                // Swap with the last element
+                pendingRequests[i] = pendingRequests[
+                    pendingRequests.length - 1
+                ];
+                // Remove the last element
+                pendingRequests.pop();
+                break;
+            }
+        }
     }
 
     function requestReturn(
@@ -475,20 +537,29 @@ contract DrugSupplyChain is AccessControl {
         );
 
         returnRequests[_batchId] = ReturnRequest({
+            batchId: _batchId,
             requester: msg.sender,
             reason: reason,
             approved: false,
             timestamp: block.timestamp,
             refunded: false
         });
-
+        pendingRequests.push(returnRequests[_batchId]);
+        // Update the batch status based on who is requesting the return
         if (msg.sender == batchIdToBatch[_batchId].retailer) {
             batchIdToBatch[_batchId].status = "Return requested by retailer";
         } else {
             batchIdToBatch[_batchId].status = "Return requested by distributor";
         }
 
-        emit ReturnRequested(msg.sender, reason, false, block.timestamp, false);
+        emit ReturnRequested(
+            _batchId,
+            msg.sender,
+            reason,
+            false,
+            block.timestamp,
+            false
+        );
     }
 
     function rejectRequest(bytes32 _batchId) public {
@@ -510,7 +581,7 @@ contract DrugSupplyChain is AccessControl {
         } else {
             revert("Unauthorized to reject this request");
         }
-
+        delete pendingRequests[returnRequests[_batchId]];
         delete returnRequests[_batchId];
     }
 
