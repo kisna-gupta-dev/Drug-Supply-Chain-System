@@ -4,6 +4,8 @@ pragma solidity ^0.8.24;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "@chainlink\contracts\src\v0.8\automation\interfaces\AutomationCompatibleInterface.sol";
+import "./Escrow.sol";
+
 
 contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //The contract is for tracking Supply Chain system of Drugs
@@ -22,6 +24,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     uint256 public batchCount; //Counter for the number of batches created
 
     AggregatorV3Interface internal dataFeed;
+    Escrow public escrowContract;
 
     //Enum for Batch Status External
     enum BatchStatus {
@@ -49,6 +52,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 timestamp; //Timestamp of the last update
         uint256 price; //Price of the drug in the batch
         uint256 productPrice;
+        BatchStatus statusEnum;
         uint256 MRP; //Maximum Retail Price
     }
     struct ReturnRequest {
@@ -63,6 +67,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //Events
     event BatchCreated(
         bytes32 indexed batchId,
+        BatchStatus statusEnum,
         string drugName,
         uint256 productQuantity,
         uint256 drugQuantity,
@@ -75,6 +80,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     );
     event DistributerPurchased(
         bytes32 indexed batchId,
+        BatchStatus statusEnum,
         string drugName,
         uint256 productQuantity,
         uint256 drugQuantity,
@@ -89,6 +95,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
 
     event RetailerPurchased(
         bytes32 indexed batchId,
+        BatchStatus statusEnum,
         string drugName,
         uint256 productQuantity,
         address indexed manufacturer,
@@ -103,6 +110,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
 
     event EligibleForResell(
         bytes32 indexed batchId,
+        BatchStatus statusEnum,
         string drugName,
         uint256 productQuantity,
         uint256 drugQuantity,
@@ -118,6 +126,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
 
     event ResellingDone(
         bytes32 indexed batchId,
+        BatchStatus statusEnum,
         string drugName,
         uint256 productQuantity,
         uint256 drugQuantity,
@@ -131,6 +140,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     );
 
     event ReturnRequested(
+        bytes32 indexed batchId,
         address indexed requester,
         string reason,
         bool approved,
@@ -139,6 +149,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     );
 
     event RequestApproved(
+        bytes32 indexed batchId,
         address indexed requester,
         string reason,
         bool approved,
@@ -309,6 +320,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
 
         batchCount++;
         newBatch.timestamp = block.timestamp;
+        statusEnum = BatchStatus.Manufactured;
         newBatch.status = "Manufactured and ready for distribution";
         newBatch.drugName = drugName;
         newBatch.productQuantity = productQuantity;
@@ -339,6 +351,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         //This event is for frontend to know about the batch creation and details wiht this we can generate a QR code for Information
         emit BatchCreated(
             newBatch.batchId,
+            newBatch.statusEnum,
             newBatch.drugName,
             newBatch.productQuantity,
             newBatch.drugQuantity,
@@ -383,7 +396,9 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         );
 
         require(msg.value >= batchIdToBatch[_batchId].price, "Less Price Sent");
-        excessPayment(_batchId);
+        //Escrow Contract to handle the payment
+        escrowContract
+            .buy{value: msg.value}(msg.sender, batchIdToBatch[_batchId].manufacturer);
 
         // This is the price at which the distributor will sell the product to the retailer
         // Product price = drugQuantity * Price of a Single Unit of the drug
@@ -395,9 +410,11 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         batchIdToBatch[_batchId].distributor = msg.sender;
         batchIdToBatch[_batchId]
             .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
+        batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
 
         emit DistributerPurchased(
             _batchId,
+            batchIdToBatch[_batchId].statusEnum,
             batchIdToBatch[_batchId].drugName,
             batchIdToBatch[_batchId].productQuantity,
             batchIdToBatch[_batchId].drugQuantity,
@@ -445,18 +462,22 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
             "Less Price Sent"
         );
 
-        excessPayment(_batchId);
+        //Escrow Contract to handle the payment
+        escrowContract
+            .buy{value: msg.value}(msg.sender, batchIdToBatch[_batchId].distributor);
 
         //Updations to be done for retailer
         batchIdToBatch[_batchId].timestamp = block.timestamp;
         batchIdToBatch[_batchId].retailer = msg.sender;
         batchIdToBatch[_batchId].status = "Retailer is the Owner of the batch";
+        batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
         //Updation in QR code to be done as well
         //The QR code should now contain the retailer's address as well
 
         // Emit the event for Retailer purchase
         emit RetailerPurchased(
             _batchId,
+            batchIdToBatch[_batchId].statusEnum
             batchIdToBatch[_batchId].drugName,
             batchIdToBatch[_batchId].productQuantity,
             batchIdToBatch[_batchId].manufacturer,
@@ -483,23 +504,26 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
             hasRole(DISTRIBUTOR_ROLE, msg.sender)
         ) {
             // Retailer returning to Distributor
-            payable(requester).transfer(batchIdToBatch[_batchId].productPrice);
+            // payable(requester).transfer(batchIdToBatch[_batchId].productPrice);
             batchIdToBatch[_batchId].retailer = address(0);
             batchIdToBatch[_batchId].status = "Returned to Distributor";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnedToDistributor;
         } else if (
             requester == batchIdToBatch[_batchId].distributor &&
             hasRole(MANUFACTURER_ROLE, msg.sender)
         ) {
             // Distributor returning to Manufacturer
-            payable(requester).transfer(batchIdToBatch[_batchId].price);
+            // payable(requester).transfer(batchIdToBatch[_batchId].price);
             batchIdToBatch[_batchId].distributor = address(0);
             batchIdToBatch[_batchId].status = "Returned to Manufacturer";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnedToManufacturer;
         } else {
             revert("Unauthorized caller for approving this return");
         }
 
         returnRequests[_batchId].approved = true;
         returnRequests[_batchId].refunded = true;
+        
         removePendingRequest(_batchId);
         emit RequestApproved(
             _batchId,
@@ -511,9 +535,11 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         );
     }
 
-    function removePendingRequest(uint256 _batchId) internal {
+    function removePendingRequest(bytes32 _batchId) internal {
         for (uint256 i = 0; i < pendingRequests.length; i++) {
-            if (pendingRequests[i] == returnRequests[_batchId]) {
+            if (
+                pendingRequests[i].batchId == returnRequests[_batchId].batchId
+            ) {
                 // Swap with the last element
                 pendingRequests[i] = pendingRequests[
                     pendingRequests.length - 1
@@ -548,8 +574,11 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         // Update the batch status based on who is requesting the return
         if (msg.sender == batchIdToBatch[_batchId].retailer) {
             batchIdToBatch[_batchId].status = "Return requested by retailer";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnRequestedByRetailer;
         } else {
             batchIdToBatch[_batchId].status = "Return requested by distributor";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnRequestedByDistributor;
+
         }
 
         emit ReturnRequested(
@@ -572,35 +601,23 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         ) {
             batchIdToBatch[_batchId]
                 .status = "Retailer is the Owner of the batch";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
+
         } else if (
             requester == batchIdToBatch[_batchId].distributor &&
             hasRole(MANUFACTURER_ROLE, msg.sender)
         ) {
             batchIdToBatch[_batchId]
                 .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
+
         } else {
             revert("Unauthorized to reject this request");
         }
-        delete pendingRequests[returnRequests[_batchId]];
+        removePendingRequest(_batchId);
         delete returnRequests[_batchId];
     }
 
-    function excessPayment(bytes32 _batchId) public payable {
-        address payable toPay;
-        uint256 excessAmount;
-        if (
-            batchIdToBatch[_batchId].retailer == msg.sender &&
-            msg.value > batchIdToBatch[_batchId].productPrice
-        ) {
-            excessAmount = msg.value - batchIdToBatch[_batchId].productPrice;
-            toPay = payable(batchIdToBatch[_batchId].distributor);
-        } else {
-            excessAmount = msg.value - batchIdToBatch[_batchId].price;
-            toPay = payable(batchIdToBatch[_batchId].manufacturer);
-        }
-        payable(msg.sender).transfer(excessAmount);
-        payable(toPay).transfer(msg.value - excessAmount);
-    }
 
     function frozeAddress(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(account != address(0), "Cannot freeze the zero address");
@@ -653,9 +670,11 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         // Update the status to indicate that the distributor wants to resell the batch
         batchIdToBatch[_batchId]
             .status = "Distributor wants to resell the batch to another distributor";
+        batchIdToBatch[_batchId].statusEnum = BatchStatus.ResellingToDistributor;
 
         emit EligibleForResell(
             _batchId,
+            batchIdToBatch[_batchId].statusEnum,
             batchIdToBatch[_batchId].drugName,
             batchIdToBatch[_batchId].productQuantity,
             batchIdToBatch[_batchId].drugQuantity,
@@ -687,6 +706,10 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
             "Batch is already purchased by a retailer"
         );
         require(
+            batchIdToBatch[_batchId].price >= msg.value,
+            "Price must equal to or greater than the batch price"
+        );
+        require(
             keccak256(bytes(batchIdToBatch[_batchId].status)) ==
                 keccak256(
                     bytes(
@@ -695,15 +718,20 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
                 ),
             "Distributor is not ready to resell the batch"
         );
-        // Transfer the payment to the manufacturer
-        payable(batchIdToBatch[_batchId].distributor).transfer(msg.value);
+        // Transfer the payment to the distributor
+        escrowContract.buy{value: msg.value}(
+            msg.sender,
+            batchIdToBatch[_batchId].distributor
+        );
         batchIdToBatch[_batchId].timestamp = block.timestamp;
         batchIdToBatch[_batchId]
             .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
+        batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
         batchIdToBatch[_batchId].distributor = msg.sender; // Update the distributor to the new distributor
         // Emit an event for the resell payment
         emit ResellingDone(
             _batchId,
+            batchIdToBatch[_batchId].statusEnum,
             batchIdToBatch[_batchId].drugName,
             batchIdToBatch[_batchId].productQuantity,
             batchIdToBatch[_batchId].drugQuantity,
@@ -716,6 +744,40 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
             batchIdToBatch[_batchId].MRP
         );
     }
+
+    function batchReceived(
+        bytes32 _batchId
+    ) internal payable onlyRole(RETAILER_ROLE) onlyRole(DISTRIBUTOR_ROLE) notFrozen {
+        if(
+            batchIdToBatch[_batchId].retailer == msg.sender &&
+            hasRole(RETAILER_ROLE, msg.sender)
+        ) {
+            // Retailer receiving the batch
+            batchIdToBatch[_batchId].status = "Retailer has received the batch";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
+            escrowContract.release(
+                batchIdToBatch[_batchId].retailer,
+                batchIdToBatch[_batchId].productPrice
+            );
+        } else if (
+            batchIdToBatch[_batchId].distributor == msg.sender &&
+            hasRole(DISTRIBUTOR_ROLE, msg.sender)
+        ) {
+            // Distributor receiving the batch
+            batchIdToBatch[_batchId].status = "Distributor has received the batch";
+            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
+            escrowContract.release(
+                batchIdToBatch[_batchId].distributor,
+                batchIdToBatch[_batchId].price
+            );
+        } else {
+            revert("Unauthorized to mark this batch as received");
+        }
+
+        // Logic to mark the batch as received by the retailer
+        // This can include updating the status or any other necessary actions
+    }
+
 
     //function to withdraw stcked eth from contract
     function withdraw() public onlyRole(DEFAULT_ADMIN_ROLE) {
