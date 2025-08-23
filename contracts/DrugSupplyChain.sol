@@ -3,27 +3,65 @@ pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import "@chainlink\contracts\src\v0.8\automation\interfaces\AutomationCompatibleInterface.sol";
-import "./Escrow.sol";
+import {AutomationCompatibleInterface} from "@chainlink\contracts\src\v0.8\automation\interfaces\AutomationCompatibleInterface.sol";
+import {Escrow} from "./Escrow.sol";
 
-
+/**
+ * @title DrugSupplyChain
+ *
+ * @dev This contract manages the drug supply chain, allowing manufacturers, distributors, and retailers to
+ * create batches, handle returns, and manage roles.
+ * It uses Chainlink for price feeds and automation for handling return requests.
+ * It implements role-based access control using OpenZeppelin's AccessControl.
+ * The contract allows for batch creation, purchase by distributors and retailers, return requests,
+ * and approval of return requests.
+ * It also includes functionality for reselling batches and managing addresses.
+ * The contract emits events for significant actions such as batch creation, purchases, return requests,
+ * and role management.
+ * It ensures that only authorized roles can perform specific actions, and it provides mechanisms
+ * to freeze and unfreeze addresses to prevent unauthorized actions.
+ * The contract is designed to be secure, with checks for valid addresses, batch ownership, and
+ * appropriate status checks before allowing actions like reselling or returning batches.
+ * The contract is designed to ensure the integrity and authenticity of drugs in the supply chain.
+ *
+ * @author Kisna Gupta
+ *
+ * @notice This contract is part of a larger drug supply chain system and should be used in conjunction with other contracts
+ * in the system for full functionality.
+ */
 contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //The contract is for tracking Supply Chain system of Drugs
     //To ensure the integrity and authenticity of drugs in the supply chain
 
+    /// @notice Role identifier for manufacturers in the supply chain
     bytes32 public constant MANUFACTURER_ROLE = keccak256("MANUFACTURER_ROLE");
+    /// @notice Role identifier for distributors in the supply chain
     bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
+    /// @notice Role identifier for retailers in the supply chain
     bytes32 public constant RETAILER_ROLE = keccak256("RETAILER_ROLE");
 
     //mappings
-    mapping(address => uint256) public batchCounter; //Counter for batches created by each manufacturer
-    mapping(bytes32 => Batch) public batchIdToBatch; //Mapping of batchId to Batch struct for quick access
-    mapping(address => bool) public isFrozen; //Mapping to check if an address is frozen
-    mapping(bytes32 => ReturnRequest) public returnRequests; // Batch Return Request tracking
-    ReturnRequest[] public pendingRequests; //Array to store pending return requests
-    uint256 public batchCount; //Counter for the number of batches created
+    ///@notice Counter for batches created by each manufacturer
+    mapping(address => uint256) public batchCounter;
 
+    /// @notice Mapping from batch ID to Batch details
+    mapping(bytes32 => Batch) public batchIdToBatch;
+
+    /// @notice Mapping to check if an address is frozen
+    mapping(address => bool) public isFrozen;
+
+    /// @notice Mapping to track return requests for batches
+    mapping(bytes32 => ReturnRequest) public returnRequests;
+
+    /// @notice Array to store pending return requests
+    ReturnRequest[] public pendingRequests;
+
+    /// @notice Counter for the number of batches created
+    uint256 public batchCount;
+
+    /// @notice Chainlink price feed for USD to ETH conversion
     AggregatorV3Interface internal dataFeed;
+    /// @notice Escrow contract to handle payments securely
     Escrow public escrowContract;
 
     //Enum for Batch Status External
@@ -53,18 +91,31 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 price; //Price of the drug in the batch
         uint256 productPrice;
         BatchStatus statusEnum;
-        uint256 MRP; //Maximum Retail Price
+        uint256 mrp; //Maximum Retail Price
     }
+
     struct ReturnRequest {
-        bytes32 batchId; // The ID of the batch being returned
-        address requester;
-        string reason;
-        bool approved;
+        bytes32 batchId;
         uint256 timestamp;
+        address requester;
         bool refunded;
+        bool approved;
+        string reason;
     }
 
     //Events
+    /// @notice Event emitted when a new batch is created
+    /// @param batchId The unique identifier for the batch
+    /// @param statusEnum The status of the batch
+    /// @param drugName The name of the drug in the batch
+    /// @param productQuantity The quantity of the product in the batch
+    /// @param drugQuantity The quantity of the drug in the batch
+    /// @param manufacturer The address of the manufacturer who created the batch
+    /// @param expiryDate The expiry date of the drug in the batch
+    /// @param price The price of the drug in the batch
+    /// @param status The status of the batch
+    /// @param timestamp The timestamp when the batch was created
+    /// @param mrp The maximum retail price of the drug in the batch
     event BatchCreated(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
@@ -76,8 +127,21 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 price,
         string status,
         uint256 timestamp,
-        uint256 MRP
+        uint256 mrp
     );
+
+    /// @notice Event emitted when a distributor purchases a batch
+    /// @param batchId The unique identifier for the batch
+    /// @param statusEnum The status of the batch
+    /// @param drugName The name of the drug in the batch
+    /// @param productQuantity The quantity of the product in the batch
+    /// @param drugQuantity The quantity of the drug in the batch
+    /// @param manufacturer The address of the manufacturer who created the batch
+    /// @param expiryDate The expiry date of the drug in the batch
+    /// @param price The price of the drug in the batch
+    /// @param status The status of the batch
+    /// @param timestamp The timestamp when the batch was created
+    /// @param mrp The maximum retail price of the drug in the batch
     event DistributerPurchased(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
@@ -90,9 +154,10 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 price,
         string status,
         uint256 timestamp,
-        uint256 MRP
+        uint256 mrp
     );
 
+    /// @notice Event emitted when a retailer purchases a batch
     event RetailerPurchased(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
@@ -105,9 +170,11 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 productPrice,
         string status,
         uint256 timestamp,
-        uint256 MRP
+        uint256 mrp
     );
 
+    /// @notice Event emitted when a batch is eligible for reselling
+    /// @param reason The reason for reselling the batch
     event EligibleForResell(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
@@ -120,10 +187,11 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 price,
         string status,
         uint256 timestamp,
-        uint256 MRP,
+        uint256 mrp,
         string reason
     );
 
+    /// @notice Event emitted when a batch is resold
     event ResellingDone(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
@@ -136,62 +204,84 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         uint256 price,
         string status,
         uint256 timestamp,
-        uint256 MRP
+        uint256 mrp
     );
 
+    /// @notice Event emitted when a return request is made
+    /// @param batchId The unique identifier for the batch
+    /// @param requester The address of the requester (retailer or distributor)
+    /// @param reason The reason for the return request
+    /// @param approved Whether the request is approved
+    /// @param timestamp The timestamp when the request was made
+    /// @param refunded Whether the request has been refunded
     event ReturnRequested(
         bytes32 indexed batchId,
+        uint256 indexed timestamp,
         address indexed requester,
-        string reason,
-        bool approved,
-        uint256 timestamp,
-        bool refunded
+        bool indexed approved,
+        bool indexed refunded,
+        string reason
     );
 
+    /// @notice Event emitted when a return request is approved
     event RequestApproved(
         bytes32 indexed batchId,
         address indexed requester,
-        string reason,
-        bool approved,
-        uint256 timestamp,
-        bool refunded
+        uint256 indexed timestamp,
+        bool indexed approved,
+        bool indexed refunded,
+        string reason
     );
 
+    /// @notice Event emitted when an address is frozen
+    /// @param account The account address needs to be frozen
     event AddressFrozen(address account);
-
+    /// @notice Event emitted when an address is unfrozen
+    /// @param account The account address needs to be unfreeze
     event AddressUnfrozen(address account);
 
+    //errors
+    error AddressAlreadyExists(string role, address account);
+    error AddressInvalid(address account);
+    error InvalidAmount(_usdAmount);
     //Modifiers
+    /// @notice Modifier to check if the newAddress is not already a member of any role
+    /// @param newMember The address to check if it is already a member of any role
     modifier mustBeNew(address newMember) {
-        require(
-            hasRole(RETAILER_ROLE, newMember) == false,
-            "You are already a Retailer, Please use different address"
-        );
-        require(
-            hasRole(MANUFACTURER_ROLE, newMember) == false,
-            "You are already a Manufacturer, Please use different address"
-        );
-        require(
-            hasRole(DISTRIBUTOR_ROLE, newMember) == false,
-            "You are already a Distributor, Please use different address"
-        );
-        require(newMember != address(0), "Address must not be zero");
+        if (hasRole(MANUFACTURER_ROLE, newMember)) {
+            revert AddressAlreadyExists("Manufacturer", newMember);
+        }
+        if (hasRole(RETAILER_ROLE, newMember)) {
+            revert AddressAlreadyExists("Retailer", newMember);
+        }
+        if (hasRole(DISTRIBUTOR_ROLE, newMember)) {
+            revert AddressAlreadyExists("Distributor", newMember);
+        }
+        if (newMember == address(0)) {
+            AddressInvalid(newMember);
+        }
         _;
     }
 
     modifier notFrozen() {
-        require(!isFrozen[msg.sender], "Your address is frozen");
+        if (isFrozen[msg.sender]) {
+            revert AddressInvalid(msg.sender);
+        }
         _;
     }
 
-    //Constructor to set the deployer as the DEFAULT_ADMIN_ROLE
+    /// @notice Constructor to set the deployer as the DEFAULT_ADMIN_ROLE and to set priceFeed
+    /// @param _priceFeedAddress The address of price feed for ETH conversion
     constructor(address _priceFeedAddress) {
         dataFeed = AggregatorV3Interface(_priceFeedAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    //ChainLink Automation functions
-    //This is used to check if any request is pending for approval for more than 3 days
+    /// @notice ChainLink automation function (This is used to check if any request is pending for approval for more than 3 days)
+    /// @notice CheckUpKeeps checks the condition (here for 3 days)
+    /// @param checkData The data sent for checking data
+    /// @return upkeepNeeded Whether upkeep is needed
+    /// @return performData The data to be sent for performing upkeep
     function checkUpkeep(
         bytes calldata checkData
     )
@@ -216,26 +306,32 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         return (false, "");
     }
 
+    /// @notice PerformUpkeep performs the operations instructed in it after CheckUpkeep's instructions are checked
+    /// @param performData The data sent from CheckUpKeep
     function performUpkeep(bytes calldata performData) external override {
         bytes32 batchId = abi.decode(performData, (bytes32));
-        require(
-            returnRequests[batchId].requester != address(0),
-            "No return request found"
-        );
+        if (returnRequests[batchId].requester == address(0)) {
+            revert AddressInvalid(batchIdToBatch[batchId].retailer);
+        }
         if (hasRole(DISTRIBUTOR_ROLE, returnRequests[batchId].requester)) {
-            payable(returnRequests[batchId].requester).transfer(
+            escrowContract.release(
+                returnRequests[batchId].requester,
                 batchIdToBatch[batchId].productPrice
             );
         } else {
-            payable(returnRequests[batchId].requester).transfer(
+            escrowContract.release(
+                returnRequests[batchId].requester,
                 batchIdToBatch[batchId].price
             );
         }
         returnRequests[batchId].approved = true;
         returnRequests[batchId].refunded = true;
-        batchIdToBatch[batchId].status = "Return request approved and refunded";
+        batchIdToBatch[batchId].statusEnum = BatchStatus.ReturnedToManufacturer;
     }
 
+    /// @notice The function for price Conversion rate
+    /// @dev This function fetches the latest price from the Chainlink data feed
+    /// @return The latest price of ETH in USD
     function getDataFeedLatestAnswer() internal view returns (uint256) {
         (
             ,
@@ -247,557 +343,53 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         return uint256(answer);
     }
 
-    //IMPORTANT -> THE _usdAMount PASSED MUST BE MULTIPLIESD BY 1e18
-    //A very important function to be called for calculating Ethereum from USD entered
-    //The function will be first called before any payment is initiated
-    //As the inputs are in USD and the transactions are done in eth so we need to convert that USD in Eth
-    //First we will convergt USD in ETh then we call any other function
+    /** @notice The Eth to USD calculation
+     * @dev //IMPORTANT -> THE _usdAMount PASSED MUST BE MULTIPLIESD BY 1e18
+     *A very important function to be called for calculating Ethereum from USD entered
+     *The function will be first called before any payment is initiated
+     *As the inputs are in USD and the transactions are done in eth so we need to convert that USD in Eth
+     *First we will convert USD in ETh then we call any other function
+     * @param _usdAmount the Amount to be transferred in USD
+     * @return amountEth the amount in Eth that needs to be transferred
+     */
     function calculateEthfromUSD(
         uint256 _usdAmount
     ) internal returns (uint256) {
         uint256 price = getDataFeedLatestAnswer();
-        require(price > 0, "Invalid Price Feed");
-        require(_usdAmount > 0, "Sent Amount is less");
+        if (price <= 0) {
+            revert("Invalid price feed data");
+        }
+        if (_usdAmount <= 0) {
+            revert InvalidAmount(_usdAmount);
+        }
 
         uint256 amountEth = (_usdAmount * 1e8) / price;
         return amountEth;
     }
 
-    //Granting Roles to the address according to their working in the supply chain
-    //Manufacturer, Distributor, Retailer
-    //Only the address with DEFAULT_ADMIN_ROLE can add Manufacturer roles
-    function addManufacturer(
-        address manufacturer
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) mustBeNew(manufacturer) {
-        //IMPORTANT: The manufacturer's Identity must be verified offchain as we should not Store Crucial data directly to blockchain,
-        // So we use backend APIs to first verify the identity of the manufacturer and then call this fucntion to add the manufacturer
-        // This way we get the manufacturer which is verified and authenticated and also to store crucial data we use
-        // IPFS or any other decentralized storage system for storage of data
-        _grantRole(MANUFACTURER_ROLE, manufacturer);
-    }
-
-    function addDistributor(
-        address distributor
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) mustBeNew(distributor) {
-        //IMPORTANT: The distributor's Identity must be verified offchain as we should not Store Crucial data directly to blockchain,
-        // So we use backend APIs to first verify the identity of the distributor and then call this
-
-        _grantRole(DISTRIBUTOR_ROLE, distributor);
-    }
-
-    function addRetailer(
-        address retailer
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) mustBeNew(retailer) {
-        //IMPORTANT: The retailer's Identity must be verified offchain as we should not Store Crucial data directly to blockchain,
-        // So we use backend APIs to first verify the identity of the retailer and then call this
-        _grantRole(RETAILER_ROLE, retailer);
-    }
-
-    //Batch creation function by Manufacturer
-    //Only the address with MANUFACTURER_ROLE can create a batch
-    function createBatch(
-        string memory drugName,
-        uint256 productQuantity,
-        uint256 drugQuantity,
-        address manufacturer,
-        uint256 expiryDate,
-        uint256 price,
-        uint256 MRP
-    ) public onlyRole(MANUFACTURER_ROLE) notFrozen {
-        Batch memory newBatch;
-
-        require(
-            productQuantity > 0,
-            "productQuantity must be greater than zero"
-        );
-        require(drugQuantity > 0, "drugQuantity must be greater than zero");
-        require(
-            expiryDate > block.timestamp,
-            "Expiry date must be in the future"
-        );
-        require(bytes(drugName).length > 0, "Drug name must not be empty");
-        require(price > 0, "Price must be greater than zero");
-
-        batchCount++;
-        newBatch.timestamp = block.timestamp;
-        statusEnum = BatchStatus.Manufactured;
-        newBatch.status = "Manufactured and ready for distribution";
-        newBatch.drugName = drugName;
-        newBatch.productQuantity = productQuantity;
-        newBatch.manufacturer = manufacturer;
-        newBatch.expiryDate = expiryDate;
-        newBatch.price = price;
-        newBatch.drugQuantity = drugQuantity;
-        newBatch.MRP = MRP; //Setting the Maximum Retail Price for the batch
-
-        //Making uniqure batchID for every batch
-        //Using keccak256 hash of drugName, manufacturer address, timestamp and batch count
-        newBatch.batchId = keccak256(
-            abi.encodePacked(
-                newBatch.drugName,
-                newBatch.manufacturer,
-                newBatch.timestamp,
-                batchCounter[msg.sender]++ // Using batchCount to ensure uniqueness
-            )
-        );
-
-        //Storing the batch in the mapping
-        batchIdToBatch[newBatch.batchId] = newBatch;
-        //Generating QR code for the batch
-        //This can be done offchain and stored in IPFS or any other decentralized storage system
-        //The QR code can contain the batchId, drugName, productQuantity, manufacturer address,
-        //expiryDate, price and status of the batch
-        //This QR code can be scanned by the distributor
-        //This event is for frontend to know about the batch creation and details wiht this we can generate a QR code for Information
-        emit BatchCreated(
-            newBatch.batchId,
-            newBatch.statusEnum,
-            newBatch.drugName,
-            newBatch.productQuantity,
-            newBatch.drugQuantity,
-            newBatch.manufacturer,
-            newBatch.expiryDate,
-            newBatch.price,
-            newBatch.status,
-            newBatch.timestamp,
-            newBatch.MRP
-        );
-        //Now the batch is created and ready to be listed for distributers to buy
-    }
-
-    function buyBatchDistributor(
-        bytes32 _batchId,
-        uint256 _singleUnitPrice
-    ) public payable onlyRole(DISTRIBUTOR_ROLE) notFrozen {
-        require(
-            (batchIdToBatch[_batchId].drugQuantity * _singleUnitPrice) <
-                batchIdToBatch[_batchId].MRP,
-            "Single Unit price is to high to be sold for retailer"
-        );
-
-        require(
-            batchIdToBatch[_batchId].distributor == address(0),
-            "Already purchased by another distributor"
-        );
-
-        require(
-            batchIdToBatch[_batchId].batchId != bytes32(0),
-            "Batch does not exist"
-        );
-        require(
-            keccak256(bytes(batchIdToBatch[_batchId].status)) ==
-                keccak256(bytes("Manufactured and ready for distribution")),
-            "Batch is not available for purchase by Manufacturer"
-        );
-
-        require(
-            batchIdToBatch[_batchId].expiryDate > block.timestamp,
-            "Batch has expired"
-        );
-
-        require(msg.value >= batchIdToBatch[_batchId].price, "Less Price Sent");
-        //Escrow Contract to handle the payment
-        escrowContract
-            .buy{value: msg.value}(msg.sender, batchIdToBatch[_batchId].manufacturer);
-
-        // This is the price at which the distributor will sell the product to the retailer
-        // Product price = drugQuantity * Price of a Single Unit of the drug
-        batchIdToBatch[_batchId].productPrice =
-            batchIdToBatch[_batchId].drugQuantity *
-            _singleUnitPrice;
-        //Updating the batch details
-        batchIdToBatch[_batchId].timestamp = block.timestamp;
-        batchIdToBatch[_batchId].distributor = msg.sender;
-        batchIdToBatch[_batchId]
-            .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
-        batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
-
-        emit DistributerPurchased(
-            _batchId,
-            batchIdToBatch[_batchId].statusEnum,
-            batchIdToBatch[_batchId].drugName,
-            batchIdToBatch[_batchId].productQuantity,
-            batchIdToBatch[_batchId].drugQuantity,
-            batchIdToBatch[_batchId].manufacturer,
-            batchIdToBatch[_batchId].distributor,
-            batchIdToBatch[_batchId].expiryDate,
-            batchIdToBatch[_batchId].price,
-            batchIdToBatch[_batchId].status,
-            batchIdToBatch[_batchId].timestamp,
-            batchIdToBatch[_batchId].MRP
-        );
-        // We need to update the information on QR code as well as the owner is now the distributor
-    }
-
-    function buyBatchRetailer(
-        bytes32 _batchId
-    ) public payable onlyRole(RETAILER_ROLE) notFrozen {
-        require(
-            batchIdToBatch[_batchId].retailer == address(0),
-            "Batch is already purchased by another Retailer"
-        );
-        require(
-            batchIdToBatch[_batchId].batchId != bytes32(0),
-            "Batch does not exist"
-        );
-        require(
-            batchIdToBatch[_batchId].expiryDate > block.timestamp,
-            "Batch has expired"
-        );
-        require(
-            keccak256(bytes(batchIdToBatch[_batchId].status)) ==
-                keccak256(
-                    bytes(
-                        "Distributor is the Owner of the batch and is ready to sell to Retailer"
-                    )
-                ),
-            "Batch is not available for purchase by Distributor"
-        );
-        require(
-            batchIdToBatch[_batchId].productPrice > 0,
-            "Product Price is not set"
-        );
-        require(
-            msg.value >= batchIdToBatch[_batchId].productPrice,
-            "Less Price Sent"
-        );
-
-        //Escrow Contract to handle the payment
-        escrowContract
-            .buy{value: msg.value}(msg.sender, batchIdToBatch[_batchId].distributor);
-
-        //Updations to be done for retailer
-        batchIdToBatch[_batchId].timestamp = block.timestamp;
-        batchIdToBatch[_batchId].retailer = msg.sender;
-        batchIdToBatch[_batchId].status = "Retailer is the Owner of the batch";
-        batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
-        //Updation in QR code to be done as well
-        //The QR code should now contain the retailer's address as well
-
-        // Emit the event for Retailer purchase
-        emit RetailerPurchased(
-            _batchId,
-            batchIdToBatch[_batchId].statusEnum
-            batchIdToBatch[_batchId].drugName,
-            batchIdToBatch[_batchId].productQuantity,
-            batchIdToBatch[_batchId].manufacturer,
-            batchIdToBatch[_batchId].distributor,
-            batchIdToBatch[_batchId].retailer,
-            batchIdToBatch[_batchId].expiryDate,
-            batchIdToBatch[_batchId].productPrice,
-            batchIdToBatch[_batchId].status,
-            batchIdToBatch[_batchId].timestamp,
-            batchIdToBatch[_batchId].MRP
-        );
-    }
-
-    function approveRequest(bytes32 _batchId) public notFrozen {
-        require(!returnRequests[_batchId].approved, "Already approved");
-        require(!returnRequests[_batchId].refunded, "Already refunded");
-
-        address requester = returnRequests[_batchId].requester;
-        require(requester != address(0), "No return request found");
-
-        // Logic branch for roles
-        if (
-            requester == batchIdToBatch[_batchId].retailer &&
-            hasRole(DISTRIBUTOR_ROLE, msg.sender)
-        ) {
-            // Retailer returning to Distributor
-            // payable(requester).transfer(batchIdToBatch[_batchId].productPrice);
-            batchIdToBatch[_batchId].retailer = address(0);
-            batchIdToBatch[_batchId].status = "Returned to Distributor";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnedToDistributor;
-        } else if (
-            requester == batchIdToBatch[_batchId].distributor &&
-            hasRole(MANUFACTURER_ROLE, msg.sender)
-        ) {
-            // Distributor returning to Manufacturer
-            // payable(requester).transfer(batchIdToBatch[_batchId].price);
-            batchIdToBatch[_batchId].distributor = address(0);
-            batchIdToBatch[_batchId].status = "Returned to Manufacturer";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnedToManufacturer;
-        } else {
-            revert("Unauthorized caller for approving this return");
-        }
-
-        returnRequests[_batchId].approved = true;
-        returnRequests[_batchId].refunded = true;
-        
-        removePendingRequest(_batchId);
-        emit RequestApproved(
-            _batchId,
-            requester,
-            returnRequests[_batchId].reason,
-            true,
-            block.timestamp,
-            true
-        );
-    }
-
-    function removePendingRequest(bytes32 _batchId) internal {
-        for (uint256 i = 0; i < pendingRequests.length; i++) {
-            if (
-                pendingRequests[i].batchId == returnRequests[_batchId].batchId
-            ) {
-                // Swap with the last element
-                pendingRequests[i] = pendingRequests[
-                    pendingRequests.length - 1
-                ];
-                // Remove the last element
-                pendingRequests.pop();
-                break;
-            }
-        }
-    }
-
-    function requestReturn(
-        bytes32 _batchId,
-        string memory reason
-    ) public notFrozen {
-        require(bytes(reason).length > 0, "Reason must not be empty");
-        require(
-            ((batchIdToBatch[_batchId].retailer == msg.sender) ||
-                (batchIdToBatch[_batchId].distributor == msg.sender)),
-            "You are not the owner of this batch"
-        );
-
-        returnRequests[_batchId] = ReturnRequest({
-            batchId: _batchId,
-            requester: msg.sender,
-            reason: reason,
-            approved: false,
-            timestamp: block.timestamp,
-            refunded: false
-        });
-        pendingRequests.push(returnRequests[_batchId]);
-        // Update the batch status based on who is requesting the return
-        if (msg.sender == batchIdToBatch[_batchId].retailer) {
-            batchIdToBatch[_batchId].status = "Return requested by retailer";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnRequestedByRetailer;
-        } else {
-            batchIdToBatch[_batchId].status = "Return requested by distributor";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.ReturnRequestedByDistributor;
-
-        }
-
-        emit ReturnRequested(
-            _batchId,
-            msg.sender,
-            reason,
-            false,
-            block.timestamp,
-            false
-        );
-    }
-
-    function rejectRequest(bytes32 _batchId) public {
-        address requester = returnRequests[_batchId].requester;
-        require(requester != address(0), "No return request");
-
-        if (
-            requester == batchIdToBatch[_batchId].retailer &&
-            hasRole(DISTRIBUTOR_ROLE, msg.sender)
-        ) {
-            batchIdToBatch[_batchId]
-                .status = "Retailer is the Owner of the batch";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
-
-        } else if (
-            requester == batchIdToBatch[_batchId].distributor &&
-            hasRole(MANUFACTURER_ROLE, msg.sender)
-        ) {
-            batchIdToBatch[_batchId]
-                .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
-
-        } else {
-            revert("Unauthorized to reject this request");
-        }
-        removePendingRequest(_batchId);
-        delete returnRequests[_batchId];
-    }
-
-
-    function frozeAddress(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(account != address(0), "Cannot freeze the zero address");
-        isFrozen[account] = true;
-        _revokeRole(MANUFACTURER_ROLE, account);
-        _revokeRole(DISTRIBUTOR_ROLE, account);
-        _revokeRole(RETAILER_ROLE, account);
-        emit AddressFrozen(account);
-    }
-
-    function unfreezeAddress(
-        address account
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(account != address(0), "Cannot unfreeze the zero address");
-        isFrozen[account] = false;
-        // Re-assign roles if needed, or just leave it as is
-        // _grantRole(MANUFACTURER_ROLE, account);
-        // _grantRole(DISTRIBUTOR_ROLE, account);
-        // _grantRole(RETAILER_ROLE, account);
-        emit AddressUnfrozen(account);
-    }
-
-    function eligibleToResell(
-        bytes32 _batchId,
-        string memory reason,
-        uint256 newPrice
-    ) public onlyRole(DISTRIBUTOR_ROLE) notFrozen {
-        require(
-            batchIdToBatch[_batchId].distributor == msg.sender,
-            "You are not the owner of this batch"
-        );
-        require(
-            batchIdToBatch[_batchId].retailer == address(0),
-            "Batch is already purchased by a retailer"
-        );
-        require(
-            keccak256(bytes(batchIdToBatch[_batchId].status)) ==
-                keccak256(
-                    bytes(
-                        "Distributor is the Owner of the batch and is ready to sell to Retailer"
-                    )
-                ),
-            "Batch is not available for reselling"
-        );
-        require(
-            newPrice < batchIdToBatch[_batchId].price,
-            "Reselling price must be less than previous price"
-        );
-        batchIdToBatch[_batchId].price = newPrice;
-        // Update the status to indicate that the distributor wants to resell the batch
-        batchIdToBatch[_batchId]
-            .status = "Distributor wants to resell the batch to another distributor";
-        batchIdToBatch[_batchId].statusEnum = BatchStatus.ResellingToDistributor;
-
-        emit EligibleForResell(
-            _batchId,
-            batchIdToBatch[_batchId].statusEnum,
-            batchIdToBatch[_batchId].drugName,
-            batchIdToBatch[_batchId].productQuantity,
-            batchIdToBatch[_batchId].drugQuantity,
-            batchIdToBatch[_batchId].manufacturer,
-            batchIdToBatch[_batchId].distributor,
-            batchIdToBatch[_batchId].expiryDate,
-            batchIdToBatch[_batchId].price,
-            batchIdToBatch[_batchId].status,
-            batchIdToBatch[_batchId].timestamp,
-            batchIdToBatch[_batchId].MRP,
-            reason
-        );
-    }
-
-    //Function to pay for reselling to another distributor
-    //To be called by the distributor who is rebuying the batch
-    //Here the distributor is the actual owner trying to resell the batch and fucntion is called by newDistributor
-    // to buy the batch from the current distributor
-    function buyResellBatch(
-        bytes32 _batchId,
-        address distributor
-    ) public payable onlyRole(DISTRIBUTOR_ROLE) notFrozen {
-        require(
-            batchIdToBatch[_batchId].distributor == distributor,
-            "This distributor is not the owner of this batch"
-        );
-        require(
-            batchIdToBatch[_batchId].retailer == address(0),
-            "Batch is already purchased by a retailer"
-        );
-        require(
-            batchIdToBatch[_batchId].price >= msg.value,
-            "Price must equal to or greater than the batch price"
-        );
-        require(
-            keccak256(bytes(batchIdToBatch[_batchId].status)) ==
-                keccak256(
-                    bytes(
-                        "Distributor wants to resell the batch to another distributor"
-                    )
-                ),
-            "Distributor is not ready to resell the batch"
-        );
-        // Transfer the payment to the distributor
-        escrowContract.buy{value: msg.value}(
-            msg.sender,
-            batchIdToBatch[_batchId].distributor
-        );
-        batchIdToBatch[_batchId].timestamp = block.timestamp;
-        batchIdToBatch[_batchId]
-            .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
-        batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
-        batchIdToBatch[_batchId].distributor = msg.sender; // Update the distributor to the new distributor
-        // Emit an event for the resell payment
-        emit ResellingDone(
-            _batchId,
-            batchIdToBatch[_batchId].statusEnum,
-            batchIdToBatch[_batchId].drugName,
-            batchIdToBatch[_batchId].productQuantity,
-            batchIdToBatch[_batchId].drugQuantity,
-            batchIdToBatch[_batchId].manufacturer,
-            batchIdToBatch[_batchId].distributor,
-            batchIdToBatch[_batchId].expiryDate,
-            batchIdToBatch[_batchId].price,
-            batchIdToBatch[_batchId].status,
-            batchIdToBatch[_batchId].timestamp,
-            batchIdToBatch[_batchId].MRP
-        );
-    }
-
-    function batchReceived(
-        bytes32 _batchId
-    ) internal payable onlyRole(RETAILER_ROLE) onlyRole(DISTRIBUTOR_ROLE) notFrozen {
-        if(
-            batchIdToBatch[_batchId].retailer == msg.sender &&
-            hasRole(RETAILER_ROLE, msg.sender)
-        ) {
-            // Retailer receiving the batch
-            batchIdToBatch[_batchId].status = "Retailer has received the batch";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
-            escrowContract.release(
-                batchIdToBatch[_batchId].retailer,
-                batchIdToBatch[_batchId].productPrice
-            );
-        } else if (
-            batchIdToBatch[_batchId].distributor == msg.sender &&
-            hasRole(DISTRIBUTOR_ROLE, msg.sender)
-        ) {
-            // Distributor receiving the batch
-            batchIdToBatch[_batchId].status = "Distributor has received the batch";
-            batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
-            escrowContract.release(
-                batchIdToBatch[_batchId].distributor,
-                batchIdToBatch[_batchId].price
-            );
-        } else {
-            revert("Unauthorized to mark this batch as received");
-        }
-
-        // Logic to mark the batch as received by the retailer
-        // This can include updating the status or any other necessary actions
-    }
-
-
-    //function to withdraw stcked eth from contract
+    /// @notice function to withdraw stcked eth from contract
     function withdraw() public onlyRole(DEFAULT_ADMIN_ROLE) {
-        payable(msg.sender).transfer(address(this).balance);
+        escrowContract.release(msg.sender, address(this).balance);
     }
 
-    //Revoking roles in case of any dispute or any issue
-    //Only the address with DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @notice Rvoking Manufacturer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @param manufacturer Address of manufacturer to revoke role
     function removeManufacturer(
         address manufacturer
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _revokeRole(MANUFACTURER_ROLE, manufacturer);
     }
 
+    /// @notice Revoking distributor Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @param distributor Address of distributor to revoke role
     function removeDistributor(
         address distributor
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _revokeRole(DISTRIBUTOR_ROLE, distributor);
     }
 
+    /// @notice Revoking retailer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @param retailer Address of retailer to revoke role
     function removeRetailer(
         address retailer
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
