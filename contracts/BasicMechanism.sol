@@ -222,4 +222,20 @@ contract BasicMechanism is DrugSupplyChain {
         // Logic to mark the batch as received by the distributor
         // This can include updating the status or any other necessary actions
     }
+
+    function getBatchDetails(
+        bytes32 _batchId
+    ) public view returns (Batch memory) {
+        if (batchIdToBatch[_batchId].batchId == bytes32(0)) {
+            revert("Batch does not exist");
+        }
+        return batchIdToBatch[_batchId];
+    }
+
+    function getIpfsHash(bytes32 _batchId) public view returns (address) {
+        if (batchIdToBatch[_batchId].batchId == bytes32(0)) {
+            revert("Batch does not exist");
+        }
+        return batchIdToBatch[_batchId].ipfsHash;
+    }
 }
