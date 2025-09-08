@@ -7,6 +7,11 @@ import "./DrugSupplyChain.sol";
 //Manufacturer, Distributor, Retailer
 //Only the address with DEFAULT_ADMIN_ROLE can add Manufacturer roles
 contract HandlingAddresses is DrugSupplyChain {
+    constructor(
+        address priceFeedAddress,
+        address escrowAddress
+    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+
     function addManufacturer(
         address manufacturer
     ) public onlyRole(DEFAULT_ADMIN_ROLE) mustBeNew(manufacturer) {

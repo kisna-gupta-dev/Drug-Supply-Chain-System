@@ -4,6 +4,11 @@ pragma solidity ^0.8.0;
 import "./DrugSupplyChain.sol";
 
 contract ResellMechanism is DrugSupplyChain {
+    constructor(
+        address priceFeedAddress,
+        address escrowAddress
+    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+
     function eligibleToResell(
         bytes32 _batchId,
         string memory reason,
@@ -30,24 +35,15 @@ contract ResellMechanism is DrugSupplyChain {
         // Update the price of the batch
         batchIdToBatch[_batchId].price = newPrice;
         // Update the status to indicate that the distributor wants to resell the batch
-        batchIdToBatch[_batchId]
-            .status = "Distributor wants to resell the batch to another distributor";
         batchIdToBatch[_batchId].statusEnum = BatchStatus
             .ResellingToDistributor;
 
         emit EligibleForResell(
             _batchId,
             batchIdToBatch[_batchId].statusEnum,
-            batchIdToBatch[_batchId].drugName,
-            batchIdToBatch[_batchId].productQuantity,
-            batchIdToBatch[_batchId].drugQuantity,
-            batchIdToBatch[_batchId].manufacturer,
             batchIdToBatch[_batchId].distributor,
-            batchIdToBatch[_batchId].expiryDate,
             batchIdToBatch[_batchId].price,
-            batchIdToBatch[_batchId].status,
             batchIdToBatch[_batchId].timestamp,
-            batchIdToBatch[_batchId].MRP,
             reason
         );
     }
@@ -60,17 +56,17 @@ contract ResellMechanism is DrugSupplyChain {
         bytes32 _batchId,
         address distributor
     ) public payable onlyRole(DISTRIBUTOR_ROLE) notFrozen {
-        if (batchIdToBatch[_batchId].distributor == distributor) {
+        if (batchIdToBatch[_batchId].distributor != distributor) {
             revert("This distributor is not the owner of this batch");
         }
         if (batchIdToBatch[_batchId].expiryDate <= block.timestamp) {
             revert("Batch has expired");
         }
-        if (batchIdToBatch[_batchId].retailer == address(0)) {
+        if (batchIdToBatch[_batchId].retailer != address(0)) {
             revert("Batch is already purchased by a retailer");
         }
         if (msg.value <= 0 || msg.value < batchIdToBatch[_batchId].price) {
-            revert("Payment must be greater than zero");
+            revert("Insifficient Payment");
         }
         if (
             batchIdToBatch[_batchId].statusEnum !=
@@ -85,24 +81,15 @@ contract ResellMechanism is DrugSupplyChain {
             batchIdToBatch[_batchId].distributor
         );
         batchIdToBatch[_batchId].timestamp = block.timestamp;
-        batchIdToBatch[_batchId]
-            .status = "Distributor is the Owner of the batch and is ready to sell to Retailer";
         batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
         batchIdToBatch[_batchId].distributor = msg.sender; // Update the distributor to the new distributor
         // Emit an event for the resell payment
         emit ResellingDone(
             _batchId,
             batchIdToBatch[_batchId].statusEnum,
-            batchIdToBatch[_batchId].drugName,
-            batchIdToBatch[_batchId].productQuantity,
-            batchIdToBatch[_batchId].drugQuantity,
-            batchIdToBatch[_batchId].manufacturer,
             batchIdToBatch[_batchId].distributor,
-            batchIdToBatch[_batchId].expiryDate,
             batchIdToBatch[_batchId].price,
-            batchIdToBatch[_batchId].status,
-            batchIdToBatch[_batchId].timestamp,
-            batchIdToBatch[_batchId].MRP
+            batchIdToBatch[_batchId].timestamp
         );
     }
 }

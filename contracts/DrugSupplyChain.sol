@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import {AutomationCompatibleInterface} from "@chainlink\contracts\src\v0.8\automation\interfaces\AutomationCompatibleInterface.sol";
 import {Escrow} from "./Escrow.sol";
 
 /**
@@ -29,7 +28,7 @@ import {Escrow} from "./Escrow.sol";
  * @notice This contract is part of a larger drug supply chain system and should be used in conjunction with other contracts
  * in the system for full functionality.
  */
-contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
+contract DrugSupplyChain is AccessControl {
     //The contract is for tracking Supply Chain system of Drugs
     //To ensure the integrity and authenticity of drugs in the supply chain
 
@@ -79,19 +78,20 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //Structures
     struct Batch {
         bytes32 batchId;
-        string drugName;
-        uint256 productQuantity;
-        uint256 drugQuantity; //Quantity of the drug in the batch
+        // string drugName;
+        // uint256 productQuantity;
+        // uint256 drugQuantity; //Quantity of the drug in the batch
         address manufacturer;
         address distributor;
         address retailer;
         uint256 expiryDate;
-        string status; //e.g. "Manufactured(Manufacturer has it)", "Distributed(Distributer has it)", "Delivered to Retail"
+        // string status; //e.g. "Manufactured(Manufacturer has it)", "Distributed(Distributer has it)", "Delivered to Retail"
         uint256 timestamp; //Timestamp of the last update
         uint256 price; //Price of the drug in the batch
         uint256 productPrice;
         BatchStatus statusEnum;
-        uint256 mrp; //Maximum Retail Price
+        // uint256 mrp; //Maximum Retail Price
+        address ipfsHash; //IPFS hash to store additional details off-chain
     }
 
     struct ReturnRequest {
@@ -106,71 +106,30 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //Events
     /// @notice Event emitted when a new batch is created
     /// @param batchId The unique identifier for the batch
-    /// @param statusEnum The status of the batch
-    /// @param drugName The name of the drug in the batch
-    /// @param productQuantity The quantity of the product in the batch
-    /// @param drugQuantity The quantity of the drug in the batch
-    /// @param manufacturer The address of the manufacturer who created the batch
-    /// @param expiryDate The expiry date of the drug in the batch
-    /// @param price The price of the drug in the batch
-    /// @param status The status of the batch
     /// @param timestamp The timestamp when the batch was created
-    /// @param mrp The maximum retail price of the drug in the batch
-    event BatchCreated(
-        bytes32 indexed batchId,
-        BatchStatus statusEnum,
-        string drugName,
-        uint256 productQuantity,
-        uint256 drugQuantity,
-        address indexed manufacturer,
-        uint256 expiryDate,
-        uint256 price,
-        string status,
-        uint256 timestamp,
-        uint256 mrp
-    );
+    event BatchCreated(bytes32 indexed batchId, uint256 timestamp);
 
     /// @notice Event emitted when a distributor purchases a batch
     /// @param batchId The unique identifier for the batch
+    /// @param distributor The address of the distributor who purchased the batch
     /// @param statusEnum The status of the batch
-    /// @param drugName The name of the drug in the batch
-    /// @param productQuantity The quantity of the product in the batch
-    /// @param drugQuantity The quantity of the drug in the batch
-    /// @param manufacturer The address of the manufacturer who created the batch
-    /// @param expiryDate The expiry date of the drug in the batch
     /// @param price The price of the drug in the batch
-    /// @param status The status of the batch
     /// @param timestamp The timestamp when the batch was created
-    /// @param mrp The maximum retail price of the drug in the batch
     event DistributerPurchased(
         bytes32 indexed batchId,
+        address distributor,
         BatchStatus statusEnum,
-        string drugName,
-        uint256 productQuantity,
-        uint256 drugQuantity,
-        address indexed manufacturer,
-        address indexed distributor,
-        uint256 expiryDate,
         uint256 price,
-        string status,
-        uint256 timestamp,
-        uint256 mrp
+        uint256 timestamp
     );
 
     /// @notice Event emitted when a retailer purchases a batch
     event RetailerPurchased(
         bytes32 indexed batchId,
-        BatchStatus statusEnum,
-        string drugName,
-        uint256 productQuantity,
-        address indexed manufacturer,
-        address indexed distributor,
         address retailer,
-        uint256 expiryDate,
-        uint256 productPrice,
-        string status,
-        uint256 timestamp,
-        uint256 mrp
+        BatchStatus statusEnum,
+        uint256 price,
+        uint256 timestamp
     );
 
     /// @notice Event emitted when a batch is eligible for reselling
@@ -178,16 +137,9 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     event EligibleForResell(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
-        string drugName,
-        uint256 productQuantity,
-        uint256 drugQuantity,
-        address indexed manufacturer,
         address indexed distributor,
-        uint256 expiryDate,
         uint256 price,
-        string status,
         uint256 timestamp,
-        uint256 mrp,
         string reason
     );
 
@@ -195,16 +147,9 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     event ResellingDone(
         bytes32 indexed batchId,
         BatchStatus statusEnum,
-        string drugName,
-        uint256 productQuantity,
-        uint256 drugQuantity,
-        address indexed manufacturer,
         address indexed distributor,
-        uint256 expiryDate,
         uint256 price,
-        string status,
-        uint256 timestamp,
-        uint256 mrp
+        uint256 timestamp
     );
 
     /// @notice Event emitted when a return request is made
@@ -218,8 +163,8 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         bytes32 indexed batchId,
         uint256 indexed timestamp,
         address indexed requester,
-        bool indexed approved,
-        bool indexed refunded,
+        bool approved,
+        bool refunded,
         string reason
     );
 
@@ -228,8 +173,16 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
         bytes32 indexed batchId,
         address indexed requester,
         uint256 indexed timestamp,
-        bool indexed approved,
-        bool indexed refunded,
+        bool approved,
+        string reason
+    );
+
+    /// @notice Event emitted when a refund is processed
+    event Refunded(
+        bytes32 indexed batchId,
+        address indexed to,
+        uint256 indexed timestamp,
+        bool refunded,
         string reason
     );
 
@@ -243,7 +196,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
     //errors
     error AddressAlreadyExists(string role, address account);
     error AddressInvalid(address account);
-    error InvalidAmount(_usdAmount);
+    error InvalidAmount(uint256 _usdAmount);
     //Modifiers
     /// @notice Modifier to check if the newAddress is not already a member of any role
     /// @param newMember The address to check if it is already a member of any role
@@ -258,7 +211,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
             revert AddressAlreadyExists("Distributor", newMember);
         }
         if (newMember == address(0)) {
-            AddressInvalid(newMember);
+            revert AddressInvalid(newMember);
         }
         _;
     }
@@ -272,61 +225,10 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
 
     /// @notice Constructor to set the deployer as the DEFAULT_ADMIN_ROLE and to set priceFeed
     /// @param _priceFeedAddress The address of price feed for ETH conversion
-    constructor(address _priceFeedAddress) {
+    constructor(address _priceFeedAddress, address _escrowAddress) {
+        escrowContract = Escrow(_escrowAddress);
         dataFeed = AggregatorV3Interface(_priceFeedAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
-
-    /// @notice ChainLink automation function (This is used to check if any request is pending for approval for more than 3 days)
-    /// @notice CheckUpKeeps checks the condition (here for 3 days)
-    /// @param checkData The data sent for checking data
-    /// @return upkeepNeeded Whether upkeep is needed
-    /// @return performData The data to be sent for performing upkeep
-    function checkUpkeep(
-        bytes calldata checkData
-    )
-        external
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        for (uint256 i = 0; i < pendingRequests.length; i++) {
-            ReturnRequest memory request = pendingRequests[i];
-
-            if (
-                block.timestamp - request.timestamp > 3 days &&
-                !request.approved &&
-                !request.refunded
-            ) {
-                upkeepNeeded = true;
-                performData = abi.encode(request.batchId);
-                return (upkeepNeeded, performData);
-            }
-        }
-        return (false, "");
-    }
-
-    /// @notice PerformUpkeep performs the operations instructed in it after CheckUpkeep's instructions are checked
-    /// @param performData The data sent from CheckUpKeep
-    function performUpkeep(bytes calldata performData) external override {
-        bytes32 batchId = abi.decode(performData, (bytes32));
-        if (returnRequests[batchId].requester == address(0)) {
-            revert AddressInvalid(batchIdToBatch[batchId].retailer);
-        }
-        if (hasRole(DISTRIBUTOR_ROLE, returnRequests[batchId].requester)) {
-            escrowContract.release(
-                returnRequests[batchId].requester,
-                batchIdToBatch[batchId].productPrice
-            );
-        } else {
-            escrowContract.release(
-                returnRequests[batchId].requester,
-                batchIdToBatch[batchId].price
-            );
-        }
-        returnRequests[batchId].approved = true;
-        returnRequests[batchId].refunded = true;
-        batchIdToBatch[batchId].statusEnum = BatchStatus.ReturnedToManufacturer;
     }
 
     /// @notice The function for price Conversion rate
@@ -354,7 +256,7 @@ contract DrugSupplyChain is AccessControl, AutomationCompatibleInterface {
      */
     function calculateEthfromUSD(
         uint256 _usdAmount
-    ) internal returns (uint256) {
+    ) internal view returns (uint256) {
         uint256 price = getDataFeedLatestAnswer();
         if (price <= 0) {
             revert("Invalid price feed data");
