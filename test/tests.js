@@ -27,15 +27,19 @@ async function setupFixture() {
   const drugSupplyChainAddress = drugSupplyChain.target;
 
   await drugSupplyChain.grantRole(
-    drugSupplyChain.MANUFACTURER_ROLE,
+    await drugSupplyChain.MANUFACTURER_ROLE(),
     addr1.address,
   );
   await drugSupplyChain.grantRole(
-    drugSupplyChain.DISTRIBUTOR_ROLE,
+    await drugSupplyChain.DISTRIBUTOR_ROLE(),
     addr2.address,
   );
-  await drugSupplyChain.grantRole(drugSupplyChain.RETAILER_ROLE, addr3.address);
-  return (
+  await drugSupplyChain.grantRole(
+    await drugSupplyChain.RETAILER_ROLE(),
+    addr3.address,
+  );
+
+  return {
     deployer,
     addr1,
     addr2,
@@ -45,8 +49,8 @@ async function setupFixture() {
     mockV3Aggregator,
     mockV3Aggregatoraddress,
     drugSupplyChain,
-    drugSupplyChainAddress
-  );
+    drugSupplyChainAddress,
+  };
 }
 
 describe("Escrow", async function () {
@@ -57,7 +61,7 @@ describe("Escrow", async function () {
   it("escrow has the correct owner", async function () {
     const { escrow, deployer } = await loadFixture(setupFixture);
     const owner = await escrow.owner();
-    assert.equal(owner, deployer.address);
+    expect(owner).to.equal(deployer.address);
   });
 });
 
