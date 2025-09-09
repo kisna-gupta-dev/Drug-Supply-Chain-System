@@ -19,7 +19,8 @@
     "@typechain/hardhat": "^9.0.0",
     "chai": "^4.2.0",
     "dotenv": "^17.2.1",
-    "ethers": "^6.4.0",
+    "ethers": "^6.15.0",
+    "hardhat-deploy": "^1.0.4",
     "hardhat-gas-reporter": "^2.3.0",
     "prettier": "^3.6.2",
     "prettier-plugin-solidity": "^2.1.0",
@@ -32,7 +33,7 @@
     "coverage": "hardhat coverage",
     "lint": "solhint 'contracts/**/*.sol' 'test/**/*.sol'",
     "compile": "hardhat compile",
-    "deploy": "hardhat run ignition/deploy.js --network localhost",
+    "deploy": "hardhat run ignition/modules/deploy.js --network localhost",
     "deploy-zkEVM": "hardhat run ignition/deploy.js --network zkEVMTestnet",
     "gas-report": "hardhat test --gas"
   }
