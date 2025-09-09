@@ -12,13 +12,15 @@ async function main() {
 
   const Escrow = await ethers.getContractFactory("Escrow");
   const escrow = await Escrow.deploy();
-  const escrowaddress = await escrow.getAddress();
-  console.log("Escrow deployed to:", await escrowaddress);
+  await escrow.waitForDeployment();
+  const escrowaddress = escrow.target;
+  console.log("Escrow deployed to:", escrowaddress);
 
   console.log("----------------------------------------------------");
   const MockV3Aggregator = await ethers.getContractFactory("MockV3Aggregator");
   const mockV3Aggregator = await MockV3Aggregator.deploy(18, 435800000000);
-  const mockV3Aggregatoraddress = await mockV3Aggregator.getAddress();
+  await mockV3Aggregator.waitForDeployment();
+  const mockV3Aggregatoraddress = mockV3Aggregator.target;
   console.log("MockV3Aggregator deployed to:", mockV3Aggregatoraddress);
 
   console.log("----------------------------------------------------");
@@ -26,19 +28,10 @@ async function main() {
   const DrugSupplyChain = await ethers.getContractFactory("DrugSupplyChain");
   const drugSupplyChain = await DrugSupplyChain.deploy(
     mockV3Aggregatoraddress,
-    await escrow.getAddress(),
+    escrowaddress,
   );
-  console.log(
-    "DrugSupplyChain deployed to:",
-    await drugSupplyChain.getAddress(),
-  );
-
-  console.log("----------------------------------------------------");
-  console.log("Deploying contracts with the account:", deployer.address);
-  console.log(
-    "Account balance:",
-    (await ethers.provider.getBalance(deployer)).toString(),
-  );
+  await drugSupplyChain.waitForDeployment();
+  console.log("DrugSupplyChain deployed to:", drugSupplyChain.target);
 
   console.log("----------------------------------------------------");
   console.log("Deploying BasicMechanism Contract....");
@@ -47,9 +40,10 @@ async function main() {
     mockV3Aggregatoraddress,
     escrowaddress,
   );
+  await BasicMechanismContract.waitForDeployment();
   console.log(
     "BasicMechanism Contract deployed to:",
-    await BasicMechanismContract.getAddress(),
+    BasicMechanismContract.target,
   );
 
   console.log("----------------------------------------------------");
@@ -60,9 +54,10 @@ async function main() {
     mockV3Aggregatoraddress,
     escrowaddress,
   );
+  await HandlingAddressesContract.waitForDeployment();
   console.log(
     "HandlingAddresses Contract deployed to:",
-    await HandlingAddressesContract.getAddress(),
+    HandlingAddressesContract.target,
   );
 
   console.log("----------------------------------------------------");
@@ -72,21 +67,23 @@ async function main() {
     mockV3Aggregatoraddress,
     escrowaddress,
   );
+  await ResellMechanismContract.waitForDeployment();
   console.log(
     "ResellMechanism Contract deployed to:",
-    await ResellMechanismContract.getAddress(),
+    await ResellMechanismContract.target,
   );
 
   console.log("----------------------------------------------------");
   console.log("Deploying HandlingRequests Contract....");
-  const HandlingRequests = await ethers.getConytractFactory("HandlingRequests");
+  const HandlingRequests = await ethers.getContractFactory("HandlingRequests");
   const HandlingRequestsContract = await HandlingRequests.deploy(
     mockV3Aggregatoraddress,
     escrowaddress,
   );
+  await HandlingAddressesContract.waitForDeployment();
   console.log(
     "HandlingRequests Contract deployed to:",
-    await HandlingRequestsContract.getAddress(),
+    HandlingRequestsContract.target,
   );
 
   console.log("----------------------------------------------------");
@@ -96,9 +93,10 @@ async function main() {
     mockV3Aggregatoraddress,
     escrowaddress,
   );
+  await UpKeepAutomationContract.waitForDeployment();
   console.log(
     "Upkeep Automation Contract deployed to:",
-    await UpKeepAutomationContract.getAddress(),
+    await UpKeepAutomationContract.target,
   );
 
   console.log("----------------------------------------------------");

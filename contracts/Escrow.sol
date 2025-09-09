@@ -2,6 +2,12 @@
 pragma solidity ^0.8.0;
 
 contract Escrow {
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
     function buy(address payer, address payee) external payable {
         require(payer != address(0), "Payer address cannot be zero");
         require(payee != address(0), "Payee address cannot be zero");
@@ -14,4 +20,5 @@ contract Escrow {
         // Logic to release payment to the payee
         payable(payee).transfer(amount);
     }
+
 }
