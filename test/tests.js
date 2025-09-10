@@ -66,16 +66,102 @@ describe("Escrow", async function () {
 });
 
 describe("DrugSupplyChain", function () {
-  beforeEach(async function () {});
-  it("");
-});
-
-describe("upKeep", function () {
-  beforeEach(async function () {});
-  it("");
+  it("drugSupplyChain deployed successfully", async function () {
+    const { drugSupplyChainAddress } = await loadFixture(setupFixture);
+    expect(ethers.isAddress(drugSupplyChainAddress)).to.be.true;
+  });
+  it("drugSupplyChain has the correct owner", async function () {
+    const { drugSupplyChain, deployer } = await loadFixture(setupFixture);
+    const owner = await drugSupplyChain.owner();
+    expect(owner).to.equal(deployer.address);
+  });
+  it("escrow address is correct", async function () {
+    const { drugSupplyChain, escrowaddress } = await loadFixture(setupFixture);
+    const escrowAddr = await drugSupplyChain.escrowContract();
+    expect(escrowAddr).to.equal(escrowaddress);
+  });
+  it("Default admin role is assigned to deployer", async function () {
+    const { drugSupplyChain, deployer } = await loadFixture(setupFixture);
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.DEFAULT_ADMIN_ROLE(),
+      deployer.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+  it("Manufacturer role is assigned to addr1", async function () {
+    const { drugSupplyChain, addr1 } = await loadFixture(setupFixture);
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.MANUFACTURER_ROLE(),
+      addr1.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+  it("Distributor role is assigned to addr2", async function () {
+    const { drugSupplyChain, addr2 } = await loadFixture(setupFixture);
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.DISTRIBUTOR_ROLE(),
+      addr2.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+  it("Retailer role is assigned to addr3", async function () {
+    const { drugSupplyChain, addr3 } = await loadFixture(setupFixture);
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.RETAILER_ROLE(),
+      addr3.address,
+    );
+    expect(hasRole).to.be.true;
+  });
 });
 
 describe("BasicMechanism", function () {
+  beforeEach(async function () {
+    const {
+      mockV3Aggregatoraddress,
+      escrowaddress,
+      deployer,
+      drugSupplyChain,
+      addr1,
+      addr2,
+    } = await loadFixture(setupFixture);
+
+    const BasicMechanism = await ethers.getContractFactory("BasicMechanism");
+    this.basicMechanism = await BasicMechanism.connect(deployer).deploy(
+      mockV3Aggregatoraddress,
+      escrowaddress,
+    );
+    await this.basicMechanism.waitForDeployment();
+
+    this.expiryDate = Math.floor(new Date("2026-01-01").getTime() / 1000);
+    this.drugSupplyChain = drugSupplyChain;
+    this.addr1 = addr1;
+    this.addr2 = addr2;
+  });
+
+  it("Only Manufacturer can create batch", async function () {
+    const { basicMechanism, expiryDate, addr1, addr2 } = this;
+    const ipfsHash = ethers.ZeroAddress; // Example IPFS hash
+    const role = await basicMechanism.MANUFACTURER_ROLE();
+    const add = ethers.getAddress(addr2.address);
+    const Manufacturer = ethers.getAddress(addr1.address);
+    await expect(
+      basicMechanism
+        .connect(addr2)
+        .createBatch(Manufacturer, expiryDate, 1000, ipfsHash),
+    ).to.be.reverted;
+  });
+
+  it("Only Manufacturer can buy batch from distributor", async function () {
+    const { basicMechanism, expiryDate, addr1, addr2, drugSupplyChain } = this;
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.MANUFACTURER_ROLE(),
+      addr1.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+});
+
+describe("upKeep", function () {
   beforeEach(async function () {});
   it("");
 });

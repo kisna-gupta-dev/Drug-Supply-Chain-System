@@ -62,6 +62,7 @@ contract DrugSupplyChain is AccessControl {
     AggregatorV3Interface internal dataFeed;
     /// @notice Escrow contract to handle payments securely
     Escrow public escrowContract;
+    address public owner;
 
     //Enum for Batch Status External
     enum BatchStatus {
@@ -226,9 +227,10 @@ contract DrugSupplyChain is AccessControl {
     /// @notice Constructor to set the deployer as the DEFAULT_ADMIN_ROLE and to set priceFeed
     /// @param _priceFeedAddress The address of price feed for ETH conversion
     constructor(address _priceFeedAddress, address _escrowAddress) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        owner = msg.sender;
         escrowContract = Escrow(_escrowAddress);
         dataFeed = AggregatorV3Interface(_priceFeedAddress);
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     /// @notice The function for price Conversion rate
@@ -296,5 +298,19 @@ contract DrugSupplyChain is AccessControl {
         address retailer
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _revokeRole(RETAILER_ROLE, retailer);
+    }
+
+    function findRole(address member) public view returns (bytes32) {
+        if (hasRole(DEFAULT_ADMIN_ROLE, member)) {
+            return DEFAULT_ADMIN_ROLE;
+        } else if (hasRole(MANUFACTURER_ROLE, member)) {
+            return MANUFACTURER_ROLE;
+        } else if (hasRole(RETAILER_ROLE, member)) {
+            return RETAILER_ROLE;
+        } else if (hasRole(DISTRIBUTOR_ROLE, member)) {
+            return DISTRIBUTOR_ROLE;
+        } else {
+            revert AddressInvalid(member);
+        }
     }
 }
