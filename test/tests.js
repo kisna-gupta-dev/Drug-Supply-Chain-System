@@ -136,6 +136,7 @@ describe("BasicMechanism", function () {
     this.drugSupplyChain = drugSupplyChain;
     this.addr1 = addr1;
     this.addr2 = addr2;
+    
   });
 
   it("Only Manufacturer can create batch", async function () {
@@ -151,13 +152,20 @@ describe("BasicMechanism", function () {
     ).to.be.reverted;
   });
 
-  it("Only Manufacturer can buy batch from distributor", async function () {
+  it("Only distributor can buy batch from Manufacturer", async function () {
     const { basicMechanism, expiryDate, addr1, addr2, drugSupplyChain } = this;
     const hasRole = await drugSupplyChain.hasRole(
       await drugSupplyChain.MANUFACTURER_ROLE(),
       addr1.address,
     );
     expect(hasRole).to.be.true;
+    hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.DISTRIBUTOR_ROLE(),
+      addr2.address,
+    );
+    expect(hasRole).to.be.true;
+    
+    expect(await basicMechanism.buyBatchDistriubutor(batchId,productPrice))
   });
 });
 
