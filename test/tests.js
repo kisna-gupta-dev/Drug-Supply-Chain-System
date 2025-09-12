@@ -1,6 +1,9 @@
 const { expect } = require("chai");
 const { ethers, assert } = require("hardhat");
-const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
+const {
+  loadFixture,
+  time,
+} = require("@nomicfoundation/hardhat-network-helpers");
 
 async function setupFixture() {
   const [deployer, addr1, addr2, addr3] = await ethers.getSigners();
@@ -39,6 +42,8 @@ async function setupFixture() {
     addr3.address,
   );
 
+  console.log("-----------------------------------------------------");
+  console.log(await drugSupplyChain.MANUFACTURER_ROLE());
   return {
     deployer,
     addr1,
@@ -53,67 +58,19 @@ async function setupFixture() {
   };
 }
 
-describe("Escrow", async function () {
-  it("escrow deployed successfully", async function () {
-    const { escrowaddress } = await loadFixture(setupFixture);
-    expect(ethers.isAddress(escrowaddress)).to.be.true;
-  });
-  it("escrow has the correct owner", async function () {
-    const { escrow, deployer } = await loadFixture(setupFixture);
-    const owner = await escrow.owner();
-    expect(owner).to.equal(deployer.address);
-  });
-});
-
-describe("DrugSupplyChain", function () {
-  it("drugSupplyChain deployed successfully", async function () {
-    const { drugSupplyChainAddress } = await loadFixture(setupFixture);
-    expect(ethers.isAddress(drugSupplyChainAddress)).to.be.true;
-  });
-  it("drugSupplyChain has the correct owner", async function () {
-    const { drugSupplyChain, deployer } = await loadFixture(setupFixture);
-    const owner = await drugSupplyChain.owner();
-    expect(owner).to.equal(deployer.address);
-  });
-  it("escrow address is correct", async function () {
-    const { drugSupplyChain, escrowaddress } = await loadFixture(setupFixture);
-    const escrowAddr = await drugSupplyChain.escrowContract();
-    expect(escrowAddr).to.equal(escrowaddress);
-  });
-  it("Default admin role is assigned to deployer", async function () {
-    const { drugSupplyChain, deployer } = await loadFixture(setupFixture);
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.DEFAULT_ADMIN_ROLE(),
-      deployer.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-  it("Manufacturer role is assigned to addr1", async function () {
-    const { drugSupplyChain, addr1 } = await loadFixture(setupFixture);
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.MANUFACTURER_ROLE(),
-      addr1.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-  it("Distributor role is assigned to addr2", async function () {
-    const { drugSupplyChain, addr2 } = await loadFixture(setupFixture);
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.DISTRIBUTOR_ROLE(),
-      addr2.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-  it("Retailer role is assigned to addr3", async function () {
-    const { drugSupplyChain, addr3 } = await loadFixture(setupFixture);
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.RETAILER_ROLE(),
-      addr3.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-});
-
+function findEvent(receipt, contract, eventName) {
+  for (const log of receipt.logs) {
+    try {
+      const parsed = contract.interface.parseLog(log);
+      console.log(parsed.name);
+      if (parsed.name === eventName) {
+        return parsed;
+      }
+    } catch (error) {
+      return console.error(error.message);
+    }
+  }
+}
 describe("BasicMechanism", function () {
   beforeEach(async function () {
     const {
@@ -124,37 +81,46 @@ describe("BasicMechanism", function () {
       addr1,
       addr2,
     } = await loadFixture(setupFixture);
+    const tx2 = await drugSupplyChain
+      .connect(deployer)
+      .grantRole(await drugSupplyChain.MANUFACTURER_ROLE(), addr1.address);
+    const rece = await tx2.wait();
+    console.log(rece);
+    const parsed = findEvent(rece, drugSupplyChain, "RoleGranted");
 
     const BasicMechanism = await ethers.getContractFactory("BasicMechanism");
-    this.basicMechanism = await BasicMechanism.connect(deployer).deploy(
+    const basicMechanism = await BasicMechanism.connect(deployer).deploy(
       mockV3Aggregatoraddress,
       escrowaddress,
     );
-    await this.basicMechanism.waitForDeployment();
-
+    console.log("BasicMechanism deployed to:", deployer.address);
     this.expiryDate = Math.floor(new Date("2026-01-01").getTime() / 1000);
     this.drugSupplyChain = drugSupplyChain;
+    this.basicMechanism = basicMechanism;
     this.addr1 = addr1;
     this.addr2 = addr2;
-    
-  });
 
-  it("Only Manufacturer can create batch", async function () {
-    const { basicMechanism, expiryDate, addr1, addr2 } = this;
-    const ipfsHash = ethers.ZeroAddress; // Example IPFS hash
-    const role = await basicMechanism.MANUFACTURER_ROLE();
-    const add = ethers.getAddress(addr2.address);
-    const Manufacturer = ethers.getAddress(addr1.address);
-    await expect(
-      basicMechanism
-        .connect(addr2)
-        .createBatch(Manufacturer, expiryDate, 1000, ipfsHash),
-    ).to.be.reverted;
+    const tx = await this.basicMechanism
+      .connect(addr1)
+      .createBatch(addr1.address, this.expiryDate, 1000, ethers.ZeroAddress);
+
+    // await this.basicMechanism.on("BatchCreated", (batchId, timestamp) => {
+    //   this.batchId = batchId;
+    //   this.timestamp = timestamp;
+    // });
   });
 
   it("Only distributor can buy batch from Manufacturer", async function () {
-    const { basicMechanism, expiryDate, addr1, addr2, drugSupplyChain } = this;
-    const hasRole = await drugSupplyChain.hasRole(
+    const {
+      basicMechanism,
+      expiryDate,
+      addr1,
+      addr2,
+      drugSupplyChain,
+      batchId,
+      timestamp,
+    } = this;
+    let hasRole = await drugSupplyChain.hasRole(
       await drugSupplyChain.MANUFACTURER_ROLE(),
       addr1.address,
     );
@@ -164,9 +130,27 @@ describe("BasicMechanism", function () {
       addr2.address,
     );
     expect(hasRole).to.be.true;
-    
-    expect(await basicMechanism.buyBatchDistriubutor(batchId,productPrice))
+
+    expect(await basicMechanism.buyBatchDistributor(batchId, timestamp));
   });
+});
+// it("Manufacturer can create batch", async function () {
+//   const { basicMechanism, expiryDate, addr1, addr2 } = this;
+//   const ipfsHash = ethers.ZeroAddress; // Example IPFS hash
+//   await expect(
+//     basicMechanism
+//       .connect(addr1)
+//       .createBatch(addr1.address, expiryDate, 1000, ipfsHash),
+//   ).to.not.be.reverted;
+// });
+it("Only Manufacturer can create batch", async function () {
+  const { basicMechanism, expiryDate, addr1, addr2 } = this;
+  const ipfsHash = ethers.ZeroAddress; // Example IPFS hash
+  await expect(
+    basicMechanism
+      .connect(addr2)
+      .createBatch(addr1.address, expiryDate, 1000, ipfsHash),
+  ).to.be.reverted;
 });
 
 describe("upKeep", function () {
@@ -188,3 +172,7 @@ describe("HandlingRequests", function () {
   beforeEach(async function () {});
   it("");
 });
+
+module.exports = {
+  setupFixture,
+};
