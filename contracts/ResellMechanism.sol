@@ -6,14 +6,18 @@ import "./DrugSupplyChain.sol";
 contract ResellMechanism is DrugSupplyChain {
     constructor(
         address priceFeedAddress,
-        address escrowAddress
-    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+        address escrowAddress,
+        address handlingAddresses
+    ) DrugSupplyChain(priceFeedAddress, escrowAddress, handlingAddresses) {}
 
     function eligibleToResell(
         bytes32 _batchId,
         string memory reason,
         uint256 newPrice
-    ) public onlyRole(DISTRIBUTOR_ROLE) notFrozen {
+    ) public notFrozen {
+        if (!handlingAddresses.hasRole(DISTRIBUTOR_ROLE, msg.sender)) {
+            revert("Its not Distributor");
+        }
         if (batchIdToBatch[_batchId].distributor != msg.sender) {
             revert("You are not the owner of this batch");
         }
@@ -55,7 +59,10 @@ contract ResellMechanism is DrugSupplyChain {
     function buyResellBatch(
         bytes32 _batchId,
         address distributor
-    ) public payable onlyRole(DISTRIBUTOR_ROLE) notFrozen {
+    ) public payable notFrozen {
+        if (!handlingAddresses.hasRole(DISTRIBUTOR_ROLE, msg.sender)) {
+            revert("Its not Distributor");
+        }
         if (batchIdToBatch[_batchId].distributor != distributor) {
             revert("This distributor is not the owner of this batch");
         }

@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("BasicMechanism", function () {
-  let BasicMechanism, basicMechanism, drugSupplyChain;
+  let BasicMechanism, basicMechanism, drugSupplyChain, handlingAddresses;
   let owner, manufacturer, distributor, retailer, other;
   let priceFeed, escrow;
 
@@ -21,10 +21,17 @@ describe("BasicMechanism", function () {
     await escrow.waitForDeployment();
     console.log("--------------------------");
 
+    const HandlingAddresses =
+      await ethers.getContractFactory("HandlingAddresses");
+    handlingAddresses = await HandlingAddresses.deploy();
+    await handlingAddresses.waitForDeployment();
+    console.log("--------------------------");
+
     const DrugSupplyChain = await ethers.getContractFactory("DrugSupplyChain");
     drugSupplyChain = await DrugSupplyChain.connect(owner).deploy(
       priceFeed.target,
       escrow.target,
+      handlingAddresses.target,
     );
     await drugSupplyChain.waitForDeployment();
     console.log("--------------------------");
@@ -34,29 +41,22 @@ describe("BasicMechanism", function () {
     basicMechanism = await BasicMechanism.connect(owner).deploy(
       priceFeed.target,
       escrow.target,
+      handlingAddresses.target,
     );
     await basicMechanism.waitForDeployment();
     console.log("--------------------------");
 
-    // Grant roles
-    const MANUFACTURER_ROLE = await drugSupplyChain.MANUFACTURER_ROLE();
-    const DISTRIBUTOR_ROLE = await drugSupplyChain.DISTRIBUTOR_ROLE();
-    const RETAILER_ROLE = await drugSupplyChain.RETAILER_ROLE();
-
-    await basicMechanism
+    await handlingAddresses
       .connect(owner)
-      .grantRole(MANUFACTURER_ROLE, manufacturer.address);
-    await basicMechanism
-      .connect(owner)
-      .grantRole(DISTRIBUTOR_ROLE, distributor.address);
-    await basicMechanism
-      .connect(owner)
-      .grantRole(RETAILER_ROLE, retailer.address);
+      .addManufacturer(manufacturer.address);
+    await handlingAddresses.connect(owner).addDistributor(distributor.address);
+    await handlingAddresses.connect(owner).addRetailer(retailer.address);
   });
 
   it("All addresses are valid addresses", async function () {
     expect(priceFeed.target).to.properAddress;
     expect(escrow.target).to.properAddress;
+    expect(handlingAddresses.target).to.properAddress;
     expect(drugSupplyChain.target).to.properAddress;
     expect(basicMechanism.target).to.properAddress;
   });

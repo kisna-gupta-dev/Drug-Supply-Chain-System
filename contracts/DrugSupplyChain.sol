@@ -1,9 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {Escrow} from "./Escrow.sol";
+import {HandlingAddresses} from "./HandlingAddresses.sol";
 
 /**
  * @title DrugSupplyChain
@@ -28,16 +28,10 @@ import {Escrow} from "./Escrow.sol";
  * @notice This contract is part of a larger drug supply chain system and should be used in conjunction with other contracts
  * in the system for full functionality.
  */
-contract DrugSupplyChain is AccessControl {
+
+contract DrugSupplyChain is HandlingAddresses {
     //The contract is for tracking Supply Chain system of Drugs
     //To ensure the integrity and authenticity of drugs in the supply chain
-
-    /// @notice Role identifier for manufacturers in the supply chain
-    bytes32 public constant MANUFACTURER_ROLE = keccak256("MANUFACTURER_ROLE");
-    /// @notice Role identifier for distributors in the supply chain
-    bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
-    /// @notice Role identifier for retailers in the supply chain
-    bytes32 public constant RETAILER_ROLE = keccak256("RETAILER_ROLE");
 
     //mappings
     ///@notice Counter for batches created by each manufacturer
@@ -45,9 +39,6 @@ contract DrugSupplyChain is AccessControl {
 
     /// @notice Mapping from batch ID to Batch details
     mapping(bytes32 => Batch) public batchIdToBatch;
-
-    /// @notice Mapping to check if an address is frozen
-    mapping(address => bool) public isFrozen;
 
     /// @notice Mapping to track return requests for batches
     mapping(bytes32 => ReturnRequest) public returnRequests;
@@ -59,9 +50,10 @@ contract DrugSupplyChain is AccessControl {
     uint256 public batchCount;
 
     /// @notice Chainlink price feed for USD to ETH conversion
-    AggregatorV3Interface internal dataFeed;
+    AggregatorV3Interface public dataFeed;
     /// @notice Escrow contract to handle payments securely
     Escrow public escrowContract;
+    HandlingAddresses public handlingAddresses;
     address public owner;
 
     //Enum for Batch Status External
@@ -187,50 +179,21 @@ contract DrugSupplyChain is AccessControl {
         string reason
     );
 
-    /// @notice Event emitted when an address is frozen
-    /// @param account The account address needs to be frozen
-    event AddressFrozen(address account);
-    /// @notice Event emitted when an address is unfrozen
-    /// @param account The account address needs to be unfreeze
-    event AddressUnfrozen(address account);
-
     //errors
-    error AddressAlreadyExists(string role, address account);
     error AddressInvalid(address account);
     error InvalidAmount(uint256 _usdAmount);
-    //Modifiers
-    /// @notice Modifier to check if the newAddress is not already a member of any role
-    /// @param newMember The address to check if it is already a member of any role
-    modifier mustBeNew(address newMember) {
-        if (hasRole(MANUFACTURER_ROLE, newMember)) {
-            revert AddressAlreadyExists("Manufacturer", newMember);
-        }
-        if (hasRole(RETAILER_ROLE, newMember)) {
-            revert AddressAlreadyExists("Retailer", newMember);
-        }
-        if (hasRole(DISTRIBUTOR_ROLE, newMember)) {
-            revert AddressAlreadyExists("Distributor", newMember);
-        }
-        if (newMember == address(0)) {
-            revert AddressInvalid(newMember);
-        }
-        _;
-    }
-
-    modifier notFrozen() {
-        if (isFrozen[msg.sender]) {
-            revert AddressInvalid(msg.sender);
-        }
-        _;
-    }
 
     /// @notice Constructor to set the deployer as the DEFAULT_ADMIN_ROLE and to set priceFeed
-    /// @param _priceFeedAddress The address of price feed for ETH conversion
-    constructor(address _priceFeedAddress, address _escrowAddress) {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    constructor(
+        address _priceFeedAddress,
+        address _escrowAddress,
+        address _handlingAddresses
+    ) HandlingAddresses() {
         owner = msg.sender;
         escrowContract = Escrow(_escrowAddress);
         dataFeed = AggregatorV3Interface(_priceFeedAddress);
+        handlingAddresses = HandlingAddresses(_handlingAddresses);
+        handlingAddresses.addAdmin(msg.sender);
     }
 
     /// @notice The function for price Conversion rate
@@ -272,45 +235,8 @@ contract DrugSupplyChain is AccessControl {
     }
 
     /// @notice function to withdraw stcked eth from contract
-    function withdraw() public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdraw() public {
+        handlingAddresses.hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
         escrowContract.release(msg.sender, address(this).balance);
-    }
-
-    /// @notice Rvoking Manufacturer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
-    /// @param manufacturer Address of manufacturer to revoke role
-    function removeManufacturer(
-        address manufacturer
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        _revokeRole(MANUFACTURER_ROLE, manufacturer);
-    }
-
-    /// @notice Revoking distributor Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
-    /// @param distributor Address of distributor to revoke role
-    function removeDistributor(
-        address distributor
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        _revokeRole(DISTRIBUTOR_ROLE, distributor);
-    }
-
-    /// @notice Revoking retailer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
-    /// @param retailer Address of retailer to revoke role
-    function removeRetailer(
-        address retailer
-    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
-        _revokeRole(RETAILER_ROLE, retailer);
-    }
-
-    function findRole(address member) public view returns (bytes32) {
-        if (hasRole(DEFAULT_ADMIN_ROLE, member)) {
-            return DEFAULT_ADMIN_ROLE;
-        } else if (hasRole(MANUFACTURER_ROLE, member)) {
-            return MANUFACTURER_ROLE;
-        } else if (hasRole(RETAILER_ROLE, member)) {
-            return RETAILER_ROLE;
-        } else if (hasRole(DISTRIBUTOR_ROLE, member)) {
-            return DISTRIBUTOR_ROLE;
-        } else {
-            revert AddressInvalid(member);
-        }
     }
 }

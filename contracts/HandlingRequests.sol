@@ -6,8 +6,9 @@ import "./DrugSupplyChain.sol";
 contract HandlingRequests is DrugSupplyChain {
     constructor(
         address priceFeedAddress,
-        address escrowAddress
-    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+        address escrowAddress,
+        address handlingAddresses
+    ) DrugSupplyChain(priceFeedAddress, escrowAddress, handlingAddresses) {}
 
     function approveRequestChecks(bytes32 _batchId) internal view {
         if (returnRequests[_batchId].requester == address(0)) {
@@ -24,9 +25,10 @@ contract HandlingRequests is DrugSupplyChain {
         }
     }
 
-    function approveRequestRetailer(
-        bytes32 _batchId
-    ) public onlyRole(DISTRIBUTOR_ROLE) notFrozen {
+    function approveRequestRetailer(bytes32 _batchId) public notFrozen {
+        if (!handlingAddresses.hasRole(DISTRIBUTOR_ROLE, msg.sender)) {
+            revert("Its not Distributor");
+        }
         approveRequestChecks(_batchId);
         address requester = returnRequests[_batchId].requester;
         // Logic branch for roles
@@ -48,9 +50,10 @@ contract HandlingRequests is DrugSupplyChain {
         );
     }
 
-    function approveRequestDistributor(
-        bytes32 _batchId
-    ) public onlyRole(MANUFACTURER_ROLE) notFrozen {
+    function approveRequestDistributor(bytes32 _batchId) public notFrozen {
+        if (!handlingAddresses.hasRole(MANUFACTURER_ROLE, msg.sender)) {
+            revert("Its not Manufacturer");
+        }
         approveRequestChecks(_batchId);
         address requester = returnRequests[_batchId].requester;
 

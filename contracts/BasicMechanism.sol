@@ -6,14 +6,18 @@ import "./DrugSupplyChain.sol";
 contract BasicMechanism is DrugSupplyChain {
     constructor(
         address priceFeedAddress,
-        address escrowAddress
-    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+        address escrowAddress,
+        address handlingAddresses
+    ) DrugSupplyChain(priceFeedAddress, escrowAddress, handlingAddresses) {}
 
     function checkDataReceived(
         address manufacturer,
         uint256 expiryDate,
         uint256 price
     ) internal view {
+        if (!handlingAddresses.hasRole(MANUFACTURER_ROLE, msg.sender)) {
+            revert("Its not Manufacturer");
+        }
         if (manufacturer == address(0)) {
             revert("Manufacturer address cannot be zero");
         }
@@ -65,7 +69,7 @@ contract BasicMechanism is DrugSupplyChain {
         uint256 expiryDate,
         uint256 price,
         address ipfsHash
-    ) public onlyRole(MANUFACTURER_ROLE) notFrozen {
+    ) public notFrozen {
         checkDataReceived(manufacturer, expiryDate, price);
         updatingParams(manufacturer, expiryDate, price, ipfsHash);
         //Generating QR code for the batch
@@ -79,6 +83,9 @@ contract BasicMechanism is DrugSupplyChain {
         bytes32 _batchId,
         uint256 _productPrice
     ) internal view {
+        if (!handlingAddresses.hasRole(DISTRIBUTOR_ROLE, msg.sender)) {
+            revert("Its not Distributor");
+        }
         // Add any common checks for distributor buying here
         if (batchIdToBatch[_batchId].distributor != address(0)) {
             revert("Batch is already purchased by another distributor");
@@ -103,7 +110,7 @@ contract BasicMechanism is DrugSupplyChain {
     function buyBatchDistributor(
         bytes32 _batchId,
         uint256 _productPrice
-    ) public payable onlyRole(DISTRIBUTOR_ROLE) notFrozen {
+    ) public payable notFrozen {
         distributorBuyingChecks(_batchId, _productPrice);
 
         require(msg.value >= batchIdToBatch[_batchId].price, "Less Price Sent");
@@ -134,6 +141,9 @@ contract BasicMechanism is DrugSupplyChain {
     }
 
     function retailerBuyingChecks(bytes32 _batchId) internal view {
+        if (!handlingAddresses.hasRole(RETAILER_ROLE, msg.sender)) {
+            revert("Its not Retailer");
+        }
         // Add any common checks for retailer buying here
         if (batchIdToBatch[_batchId].retailer != address(0)) {
             revert("Batch is already purchased by another retailer");
@@ -158,9 +168,7 @@ contract BasicMechanism is DrugSupplyChain {
         }
     }
 
-    function buyBatchRetailer(
-        bytes32 _batchId
-    ) public payable onlyRole(RETAILER_ROLE) notFrozen {
+    function buyBatchRetailer(bytes32 _batchId) public payable notFrozen {
         retailerBuyingChecks(_batchId);
 
         //Escrow Contract to handle the payment
@@ -186,9 +194,10 @@ contract BasicMechanism is DrugSupplyChain {
         );
     }
 
-    function batchReceivedRetailer(
-        bytes32 _batchId
-    ) public payable onlyRole(RETAILER_ROLE) notFrozen {
+    function batchReceivedRetailer(bytes32 _batchId) public payable notFrozen {
+        if (!handlingAddresses.hasRole(RETAILER_ROLE, msg.sender)) {
+            revert("Its not Retailer");
+        }
         if (batchIdToBatch[_batchId].retailer == msg.sender) {
             // Retailer receiving the batch
             batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
@@ -204,9 +213,10 @@ contract BasicMechanism is DrugSupplyChain {
         // This can include updating the status or any other necessary actions
     }
 
-    function batchReceivedDistributor(
-        bytes32 _batchId
-    ) public onlyRole(DISTRIBUTOR_ROLE) notFrozen {
+    function batchReceivedDistributor(bytes32 _batchId) public notFrozen {
+        if (!handlingAddresses.hasRole(DISTRIBUTOR_ROLE, msg.sender)) {
+            revert("Its not Distributor");
+        }
         if (batchIdToBatch[_batchId].distributor == msg.sender) {
             // Distributor receiving the batch
             batchIdToBatch[_batchId].statusEnum = BatchStatus

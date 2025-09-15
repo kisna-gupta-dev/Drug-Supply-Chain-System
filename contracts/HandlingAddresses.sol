@@ -1,16 +1,56 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./DrugSupplyChain.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 //Granting Roles to the address according to their working in the supply chain
 //Manufacturer, Distributor, Retailer
 //Only the address with DEFAULT_ADMIN_ROLE can add Manufacturer roles
-contract HandlingAddresses is DrugSupplyChain {
-    constructor(
-        address priceFeedAddress,
-        address escrowAddress
-    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+contract HandlingAddresses is AccessControl {
+    /// @notice Mapping to check if an address is frozen
+    mapping(address => bool) public isFrozen;
+
+    /// @notice Role identifier for manufacturers in the supply chain
+    bytes32 public constant MANUFACTURER_ROLE = keccak256("MANUFACTURER_ROLE");
+    /// @notice Role identifier for distributors in the supply chain
+    bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
+    /// @notice Role identifier for retailers in the supply chain
+    bytes32 public constant RETAILER_ROLE = keccak256("RETAILER_ROLE");
+
+    /// @notice Event emitted when an address is frozen
+    /// @param account The account address needs to be frozen
+    event AddressFrozen(address account);
+    /// @notice Event emitted when an address is unfrozen
+    /// @param account The account address needs to be unfreeze
+    event AddressUnfrozen(address account);
+
+    error AddressAlreadyExists(string role, address account);
+
+    modifier mustBeNew(address newMember) {
+        if (hasRole(MANUFACTURER_ROLE, newMember)) {
+            revert AddressAlreadyExists("Manufacturer", newMember);
+        }
+        if (hasRole(RETAILER_ROLE, newMember)) {
+            revert AddressAlreadyExists("Retailer", newMember);
+        }
+        if (hasRole(DISTRIBUTOR_ROLE, newMember)) {
+            revert AddressAlreadyExists("Distributor", newMember);
+        }
+        if (newMember == address(0)) {
+            revert("Address Inavlid");
+        }
+        _;
+    }
+    modifier notFrozen() {
+        if (isFrozen[msg.sender]) {
+            revert("Address Invalid");
+        }
+        _;
+    }
+
+    function addAdmin(address Admin) external mustBeNew(Admin) {
+        _grantRole(DEFAULT_ADMIN_ROLE, Admin);
+    }
 
     function addManufacturer(
         address manufacturer
@@ -58,5 +98,26 @@ contract HandlingAddresses is DrugSupplyChain {
         // _grantRole(DISTRIBUTOR_ROLE, account);
         // _grantRole(RETAILER_ROLE, account);
         emit AddressUnfrozen(account);
+    }
+
+    /// @notice Rvoking Manufacturer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @param manufacturer Address of manufacturer to revoke role
+    function removeManufacturer(address manufacturer) public {
+        hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _revokeRole(MANUFACTURER_ROLE, manufacturer);
+    }
+
+    /// @notice Revoking distributor Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @param distributor Address of distributor to revoke role
+    function removeDistributor(address distributor) public {
+        hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _revokeRole(DISTRIBUTOR_ROLE, distributor);
+    }
+
+    /// @notice Revoking retailer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
+    /// @param retailer Address of retailer to revoke role
+    function removeRetailer(address retailer) public {
+        hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _revokeRole(RETAILER_ROLE, retailer);
     }
 }

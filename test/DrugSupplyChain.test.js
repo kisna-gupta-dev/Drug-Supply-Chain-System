@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("DrugSupplyChain", function () {
-  let drugSupplyChain, escrow, priceFeed;
+  let drugSupplyChain, escrow, priceFeed, handlingAddresses;
   let owner, manufacturer, distributor, retailer, other;
 
   beforeEach(async function () {
@@ -18,26 +18,24 @@ describe("DrugSupplyChain", function () {
     escrow = await Escrow.connect(owner).deploy();
     await escrow.waitForDeployment();
 
+    const HandlingAddresses =
+      await ethers.getContractFactory("HandlingAddresses");
+    handlingAddresses = await HandlingAddresses.connect(owner).deploy();
+    await handlingAddresses.waitForDeployment();
+
     const DrugSupplyChain = await ethers.getContractFactory("DrugSupplyChain");
     drugSupplyChain = await DrugSupplyChain.connect(owner).deploy(
       priceFeed.target,
       escrow.target,
+      handlingAddresses.target,
     );
     await drugSupplyChain.waitForDeployment();
 
-    const MANUFACTURER_ROLE = await drugSupplyChain.MANUFACTURER_ROLE();
-    const DISTRIBUTOR_ROLE = await drugSupplyChain.DISTRIBUTOR_ROLE();
-    const RETAILER_ROLE = await drugSupplyChain.RETAILER_ROLE();
-
-    await drugSupplyChain
+    await handlingAddresses
       .connect(owner)
-      .grantRole(MANUFACTURER_ROLE, manufacturer.address);
-    await drugSupplyChain
-      .connect(owner)
-      .grantRole(DISTRIBUTOR_ROLE, distributor.address);
-    await drugSupplyChain
-      .connect(owner)
-      .grantRole(RETAILER_ROLE, retailer.address);
+      .addManufacturer(manufacturer.address);
+    await handlingAddresses.connect(owner).addDistributor(distributor.address);
+    await handlingAddresses.connect(owner).addRetailer(retailer.address);
   });
 
   it("drugSupplyChain deployed successfully", async function () {
@@ -50,33 +48,5 @@ describe("DrugSupplyChain", function () {
   it("escrow address is correct", async function () {
     const escrowAddr = await drugSupplyChain.escrowContract();
     expect(escrowAddr).to.equal(escrow.target);
-  });
-  it("Default admin role is assigned to deployer", async function () {
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.DEFAULT_ADMIN_ROLE(),
-      owner.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-  it("Manufacturer role is assigned to manufacturer address", async function () {
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.MANUFACTURER_ROLE(),
-      manufacturer.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-  it("Distributor role is assigned to distributor address", async function () {
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.DISTRIBUTOR_ROLE(),
-      distributor.address,
-    );
-    expect(hasRole).to.be.true;
-  });
-  it("Retailer role is assigned to reialer address", async function () {
-    const hasRole = await drugSupplyChain.hasRole(
-      await drugSupplyChain.RETAILER_ROLE(),
-      retailer.address,
-    );
-    expect(hasRole).to.be.true;
   });
 });

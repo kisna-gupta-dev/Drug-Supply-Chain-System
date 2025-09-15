@@ -7,8 +7,9 @@ import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/autom
 contract upKeep is DrugSupplyChain, AutomationCompatibleInterface {
     constructor(
         address priceFeedAddress,
-        address escrowAddress
-    ) DrugSupplyChain(priceFeedAddress, escrowAddress) {}
+        address escrowAddress,
+        address handlingAddresses
+    ) DrugSupplyChain(priceFeedAddress, escrowAddress, handlingAddresses) {}
 
     /// @notice ChainLink automation function (This is used to check if any request is pending for approval for more than 3 days)
     /// @notice CheckUpKeeps checks the condition (here for 3 days)
