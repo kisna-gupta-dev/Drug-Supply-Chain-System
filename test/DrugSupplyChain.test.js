@@ -1,55 +1,82 @@
-// const { expect } = require("chai");
-// const { ethers, assert } = require("hardhat");
-// const {
-//   loadFixture,
-// } = require("@nomicfoundation/hardhat-network-helpers");
-// const { setupFixture } = require("./tests.js");
+const { expect } = require("chai");
+const { ethers } = require("hardhat");
 
-// describe("DrugSupplyChain", function () {
-//   it("drugSupplyChain deployed successfully", async function () {
-//     const { drugSupplyChainAddress } = await loadFixture(setupFixture);
-//     expect(ethers.isAddress(drugSupplyChainAddress)).to.be.true;
-//   });
-//   it("drugSupplyChain has the correct owner", async function () {
-//     const { drugSupplyChain, deployer } = await loadFixture(setupFixture);
-//     const owner = await drugSupplyChain.owner();
-//     expect(owner).to.equal(deployer.address);
-//   });
-//   it("escrow address is correct", async function () {
-//     const { drugSupplyChain, escrowaddress } = await loadFixture(setupFixture);
-//     const escrowAddr = await drugSupplyChain.escrowContract();
-//     expect(escrowAddr).to.equal(escrowaddress);
-//   });
-//   it("Default admin role is assigned to deployer", async function () {
-//     const { drugSupplyChain, deployer } = await loadFixture(setupFixture);
-//     const hasRole = await drugSupplyChain.hasRole(
-//       await drugSupplyChain.DEFAULT_ADMIN_ROLE(),
-//       deployer.address,
-//     );
-//     expect(hasRole).to.be.true;
-//   });
-//   it("Manufacturer role is assigned to addr1", async function () {
-//     const { drugSupplyChain, addr1 } = await loadFixture(setupFixture);
-//     const hasRole = await drugSupplyChain.hasRole(
-//       await drugSupplyChain.MANUFACTURER_ROLE(),
-//       addr1.address,
-//     );
-//     expect(hasRole).to.be.true;
-//   });
-//   it("Distributor role is assigned to addr2", async function () {
-//     const { drugSupplyChain, addr2 } = await loadFixture(setupFixture);
-//     const hasRole = await drugSupplyChain.hasRole(
-//       await drugSupplyChain.DISTRIBUTOR_ROLE(),
-//       addr2.address,
-//     );
-//     expect(hasRole).to.be.true;
-//   });
-//   it("Retailer role is assigned to addr3", async function () {
-//     const { drugSupplyChain, addr3 } = await loadFixture(setupFixture);
-//     const hasRole = await drugSupplyChain.hasRole(
-//       await drugSupplyChain.RETAILER_ROLE(),
-//       addr3.address,
-//     );
-//     expect(hasRole).to.be.true;
-//   });
-// });
+describe("DrugSupplyChain", function () {
+  let drugSupplyChain, escrow, priceFeed;
+  let owner, manufacturer, distributor, retailer, other;
+
+  beforeEach(async function () {
+    [owner, manufacturer, distributor, retailer, other] =
+      await ethers.getSigners();
+
+    const MockV3Aggregator =
+      await ethers.getContractFactory("MockV3Aggregator");
+    priceFeed = await MockV3Aggregator.connect(owner).deploy(18, 4358000);
+    await priceFeed.waitForDeployment();
+
+    const Escrow = await ethers.getContractFactory("Escrow");
+    escrow = await Escrow.connect(owner).deploy();
+    await escrow.waitForDeployment();
+
+    const DrugSupplyChain = await ethers.getContractFactory("DrugSupplyChain");
+    drugSupplyChain = await DrugSupplyChain.connect(owner).deploy(
+      priceFeed.target,
+      escrow.target,
+    );
+    await drugSupplyChain.waitForDeployment();
+
+    const MANUFACTURER_ROLE = await drugSupplyChain.MANUFACTURER_ROLE();
+    const DISTRIBUTOR_ROLE = await drugSupplyChain.DISTRIBUTOR_ROLE();
+    const RETAILER_ROLE = await drugSupplyChain.RETAILER_ROLE();
+
+    await drugSupplyChain
+      .connect(owner)
+      .grantRole(MANUFACTURER_ROLE, manufacturer.address);
+    await drugSupplyChain
+      .connect(owner)
+      .grantRole(DISTRIBUTOR_ROLE, distributor.address);
+    await drugSupplyChain
+      .connect(owner)
+      .grantRole(RETAILER_ROLE, retailer.address);
+  });
+
+  it("drugSupplyChain deployed successfully", async function () {
+    expect(drugSupplyChain.target).to.be.properAddress;
+  });
+  it("drugSupplyChain has the correct owner", async function () {
+    const ownerInContract = await drugSupplyChain.owner();
+    expect(ownerInContract).to.equal(owner.address);
+  });
+  it("escrow address is correct", async function () {
+    const escrowAddr = await drugSupplyChain.escrowContract();
+    expect(escrowAddr).to.equal(escrow.target);
+  });
+  it("Default admin role is assigned to deployer", async function () {
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.DEFAULT_ADMIN_ROLE(),
+      owner.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+  it("Manufacturer role is assigned to manufacturer address", async function () {
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.MANUFACTURER_ROLE(),
+      manufacturer.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+  it("Distributor role is assigned to distributor address", async function () {
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.DISTRIBUTOR_ROLE(),
+      distributor.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+  it("Retailer role is assigned to reialer address", async function () {
+    const hasRole = await drugSupplyChain.hasRole(
+      await drugSupplyChain.RETAILER_ROLE(),
+      retailer.address,
+    );
+    expect(hasRole).to.be.true;
+  });
+});

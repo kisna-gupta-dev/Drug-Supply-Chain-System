@@ -39,9 +39,9 @@ describe("BasicMechanism", function () {
     console.log("--------------------------");
 
     // Grant roles
-    const MANUFACTURER_ROLE = await basicMechanism.MANUFACTURER_ROLE();
-    const DISTRIBUTOR_ROLE = await basicMechanism.DISTRIBUTOR_ROLE();
-    const RETAILER_ROLE = await basicMechanism.RETAILER_ROLE();
+    const MANUFACTURER_ROLE = await drugSupplyChain.MANUFACTURER_ROLE();
+    const DISTRIBUTOR_ROLE = await drugSupplyChain.DISTRIBUTOR_ROLE();
+    const RETAILER_ROLE = await drugSupplyChain.RETAILER_ROLE();
 
     await basicMechanism
       .connect(owner)
@@ -146,37 +146,41 @@ describe("BasicMechanism", function () {
     ).to.emit(basicMechanism, "RetailerPurchased");
   });
 
-  // it("Should retrieve batch details", async function () {
-  //   const expiry = Math.floor(Date.now() / 1000) + 86400;
-  //   const price = ethers.utils.parseEther("1");
+  it("Should retrieve batch details", async function () {
+    const expiry = Math.floor(Date.now() / 1000) + 86400;
+    const price = 100;
 
-  //   const tx = await basicMechanism
-  //     .connect(manufacturer)
-  //     .createBatch(manufacturer.address, expiry, price, other.address);
-  //   const receipt = await tx.wait();
-  //   const event = receipt.events.find(
-  //     (event) => event.event === "BatchCreated",
-  //   );
-  //   const batchId = event.args.batchId;
+    const tx = await basicMechanism
+      .connect(manufacturer)
+      .createBatch(manufacturer.address, expiry, price, other.address);
+    const receipt = await tx.wait();
+    const events = await basicMechanism.queryFilter(
+      "BatchCreated",
+      receipt.blockNumber,
+    );
+    const event = events[0];
+    const batchId = event.args[0];
 
-  //   const batch = await basicMechanism.getBatchDetails(batchId);
-  //   expect(batch.manufacturer).to.equal(manufacturer.address);
-  // });
+    const batch = await basicMechanism.getBatchDetails(batchId);
+    expect(batch.manufacturer).to.equal(manufacturer.address);
+  });
 
-  // it("Should return IPFS hash for batch", async function () {
-  //   const expiry = Math.floor(Date.now() / 1000) + 86400;
-  //   const price = ethers.utils.parseEther("1");
+  it("Should return IPFS hash for batch", async function () {
+    const expiry = Math.floor(Date.now() / 1000) + 86400;
+    const price = 100;
 
-  //   const tx = await basicMechanism
-  //     .connect(manufacturer)
-  //     .createBatch(manufacturer.address, expiry, price, other.address);
-  //   const receipt = await tx.wait();
-  //   const event = receipt.events.find(
-  //     (event) => event.event === "BatchCreated",
-  //   );
-  //   const batchId = event.args.batchId;
+    const tx = await basicMechanism
+      .connect(manufacturer)
+      .createBatch(manufacturer.address, expiry, price, other.address);
+    const receipt = await tx.wait();
+    const events = await basicMechanism.queryFilter(
+      "BatchCreated",
+      receipt.blockNumber,
+    );
+    const event = events[0];
+    const batchId = event.args[0];
 
-  //   const ipfsHash = await basicMechanism.getIpfsHash(batchId);
-  //   expect(ipfsHash).to.equal(other.address);
-  // });
+    const ipfsHash = await basicMechanism.getIpfsHash(batchId);
+    expect(ipfsHash).to.equal(other.address);
+  });
 });
