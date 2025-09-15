@@ -150,7 +150,7 @@ contract BasicMechanism is DrugSupplyChain {
         if (batchIdToBatch[_batchId].expiryDate <= block.timestamp) {
             revert("Batch has expired");
         }
-        if (msg.value <= batchIdToBatch[_batchId].productPrice) {
+        if (msg.value < batchIdToBatch[_batchId].productPrice) {
             revert("Payment must be greater than productPrice");
         }
         if (batchIdToBatch[_batchId].productPrice <= 0) {
