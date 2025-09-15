@@ -11,14 +11,13 @@ contract Escrow {
     function buy(address payer, address payee) external payable {
         require(payer != address(0), "Payer address cannot be zero");
         require(payee != address(0), "Payee address cannot be zero");
-        require(msg.value >= 0, "Insufficient payment sent");
+        require(msg.value > 0, "Insufficient payment sent");
         // Payment transferred to the contract
     }
 
-    function release(address payee, uint256 amount) external {
+    function release(address payee, uint256 amount) external payable {
         require(payee != address(0), "Payee address cannot be zero");
         // Logic to release payment to the payee
         payable(payee).transfer(amount);
     }
-
 }
