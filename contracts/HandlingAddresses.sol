@@ -37,7 +37,7 @@ contract HandlingAddresses is AccessControl {
             revert AddressAlreadyExists("Distributor", newMember);
         }
         if (newMember == address(0)) {
-            revert("Address Inavlid");
+            revert("Address Invalid");
         }
         _;
     }
@@ -48,8 +48,12 @@ contract HandlingAddresses is AccessControl {
         _;
     }
 
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+
     function addAdmin(address Admin) external mustBeNew(Admin) {
-        _grantRole(DEFAULT_ADMIN_ROLE, Admin);
+        grantRole(DEFAULT_ADMIN_ROLE, Admin);
     }
 
     function addManufacturer(
@@ -59,7 +63,7 @@ contract HandlingAddresses is AccessControl {
         // So we use backend APIs to first verify the identity of the manufacturer and then call this fucntion to add the manufacturer
         // This way we get the manufacturer which is verified and authenticated and also to store crucial data we use
         // IPFS or any other decentralized storage system for storage of data
-        _grantRole(MANUFACTURER_ROLE, manufacturer);
+        grantRole(MANUFACTURER_ROLE, manufacturer);
     }
 
     function addDistributor(
@@ -68,7 +72,7 @@ contract HandlingAddresses is AccessControl {
         //IMPORTANT: The distributor's Identity must be verified offchain as we should not Store Crucial data directly to blockchain,
         // So we use backend APIs to first verify the identity of the distributor and then call this
 
-        _grantRole(DISTRIBUTOR_ROLE, distributor);
+        grantRole(DISTRIBUTOR_ROLE, distributor);
     }
 
     function addRetailer(
@@ -76,7 +80,7 @@ contract HandlingAddresses is AccessControl {
     ) public onlyRole(DEFAULT_ADMIN_ROLE) mustBeNew(retailer) {
         //IMPORTANT: The retailer's Identity must be verified offchain as we should not Store Crucial data directly to blockchain,
         // So we use backend APIs to first verify the identity of the retailer and then call this
-        _grantRole(RETAILER_ROLE, retailer);
+        grantRole(RETAILER_ROLE, retailer);
     }
 
     function frozeAddress(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -102,22 +106,25 @@ contract HandlingAddresses is AccessControl {
 
     /// @notice Rvoking Manufacturer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
     /// @param manufacturer Address of manufacturer to revoke role
-    function removeManufacturer(address manufacturer) public {
-        hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _revokeRole(MANUFACTURER_ROLE, manufacturer);
+    function removeManufacturer(
+        address manufacturer
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        revokeRole(MANUFACTURER_ROLE, manufacturer);
     }
 
     /// @notice Revoking distributor Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
     /// @param distributor Address of distributor to revoke role
-    function removeDistributor(address distributor) public {
-        hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _revokeRole(DISTRIBUTOR_ROLE, distributor);
+    function removeDistributor(
+        address distributor
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        revokeRole(DISTRIBUTOR_ROLE, distributor);
     }
 
     /// @notice Revoking retailer Role, Only DEFAULT_ADMIN_ROLE can remove Manufacturer roles
     /// @param retailer Address of retailer to revoke role
-    function removeRetailer(address retailer) public {
-        hasRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _revokeRole(RETAILER_ROLE, retailer);
+    function removeRetailer(
+        address retailer
+    ) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        revokeRole(RETAILER_ROLE, retailer);
     }
 }

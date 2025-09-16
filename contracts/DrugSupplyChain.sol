@@ -193,7 +193,6 @@ contract DrugSupplyChain is HandlingAddresses {
         escrowContract = Escrow(_escrowAddress);
         dataFeed = AggregatorV3Interface(_priceFeedAddress);
         handlingAddresses = HandlingAddresses(_handlingAddresses);
-        handlingAddresses.addAdmin(msg.sender);
     }
 
     /// @notice The function for price Conversion rate

@@ -12,18 +12,18 @@ describe("BasicMechanism", function () {
 
     // Deploy Mock PriceFeed and Escrow Contracts
     const PriceFeed = await ethers.getContractFactory("MockV3Aggregator");
-    priceFeed = await PriceFeed.deploy(18, 4358000);
+    priceFeed = await PriceFeed.connect(owner).deploy(18, 4358000);
     await priceFeed.waitForDeployment();
     console.log("--------------------------");
 
     const Escrow = await ethers.getContractFactory("Escrow");
-    escrow = await Escrow.deploy();
+    escrow = await Escrow.connect(owner).deploy();
     await escrow.waitForDeployment();
     console.log("--------------------------");
 
     const HandlingAddresses =
       await ethers.getContractFactory("HandlingAddresses");
-    handlingAddresses = await HandlingAddresses.deploy();
+    handlingAddresses = await HandlingAddresses.connect(owner).deploy();
     await handlingAddresses.waitForDeployment();
     console.log("--------------------------");
 
