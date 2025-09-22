@@ -52,9 +52,7 @@ contract HandlingAddresses is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    function addAdmin(address Admin) external mustBeNew(Admin) {
-        grantRole(DEFAULT_ADMIN_ROLE, Admin);
-    }
+    
 
     function addManufacturer(
         address manufacturer
