@@ -52,8 +52,6 @@ contract HandlingAddresses is AccessControl {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    
-
     function addManufacturer(
         address manufacturer
     ) public onlyRole(DEFAULT_ADMIN_ROLE) mustBeNew(manufacturer) {
