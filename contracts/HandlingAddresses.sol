@@ -123,4 +123,12 @@ contract HandlingAddresses is AccessControl {
     ) public onlyRole(DEFAULT_ADMIN_ROLE) {
         revokeRole(RETAILER_ROLE, retailer);
     }
+
+    ///@notice Function to check if an address has a role
+    function checkRole(
+        bytes32 role,
+        address account
+    ) public view returns (bool) {
+        return hasRole(role, account);
+    }
 }

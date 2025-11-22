@@ -24,11 +24,24 @@ async function main() {
   console.log("MockV3Aggregator deployed to:", mockV3Aggregatoraddress);
 
   console.log("----------------------------------------------------");
+  console.log("Deploying HandlingAddresses Contract....");
+  const HandlingAddresses =
+    await ethers.getContractFactory("HandlingAddresses");
+  const HandlingAddressesContract = await HandlingAddresses.deploy();
+  await HandlingAddressesContract.waitForDeployment();
+  const handlingAddresses = HandlingAddressesContract.target;
+  console.log(
+    "HandlingAddresses Contract deployed to:",
+    handlingAddresses,
+  );
+
+  console.log("----------------------------------------------------");
   console.log("Deploying DrugSupplyChain Contract....");
   const DrugSupplyChain = await ethers.getContractFactory("DrugSupplyChain");
   const drugSupplyChain = await DrugSupplyChain.deploy(
     mockV3Aggregatoraddress,
     escrowaddress,
+    handlingAddresses,
   );
   await drugSupplyChain.waitForDeployment();
   console.log("DrugSupplyChain deployed to:", drugSupplyChain.target);
@@ -39,6 +52,7 @@ async function main() {
   const BasicMechanismContract = await BasicMechanism.deploy(
     mockV3Aggregatoraddress,
     escrowaddress,
+    handlingAddresses
   );
   await BasicMechanismContract.waitForDeployment();
   console.log(
@@ -46,19 +60,6 @@ async function main() {
     BasicMechanismContract.target,
   );
 
-  console.log("----------------------------------------------------");
-  console.log("Deploying HandlingAddresses Contract....");
-  const HandlingAddresses =
-    await ethers.getContractFactory("HandlingAddresses");
-  const HandlingAddressesContract = await HandlingAddresses.deploy(
-    mockV3Aggregatoraddress,
-    escrowaddress,
-  );
-  await HandlingAddressesContract.waitForDeployment();
-  console.log(
-    "HandlingAddresses Contract deployed to:",
-    HandlingAddressesContract.target,
-  );
 
   console.log("----------------------------------------------------");
   console.log("Deploying ResellMechanism Contract....");
@@ -66,6 +67,7 @@ async function main() {
   const ResellMechanismContract = await ResellMechanism.deploy(
     mockV3Aggregatoraddress,
     escrowaddress,
+    handlingAddresses
   );
   await ResellMechanismContract.waitForDeployment();
   console.log(
@@ -79,6 +81,7 @@ async function main() {
   const HandlingRequestsContract = await HandlingRequests.deploy(
     mockV3Aggregatoraddress,
     escrowaddress,
+    handlingAddresses
   );
   await HandlingAddressesContract.waitForDeployment();
   console.log(
@@ -92,6 +95,7 @@ async function main() {
   const UpKeepAutomationContract = await UpKeepAutomation.deploy(
     mockV3Aggregatoraddress,
     escrowaddress,
+    handlingAddresses
   );
   await UpKeepAutomationContract.waitForDeployment();
   console.log(

@@ -35,6 +35,7 @@
     "compile": "hardhat compile",
     "deploy": "hardhat run ignition/modules/deploy.js --network localhost",
     "deploy-zkEVM": "hardhat run ignition/deploy.js --network zkEVMTestnet",
+    "deploy-ganache": "hardhat run ignition/modules/deploy.js --network ganache",
     "gas-report": "hardhat test --gas"
   }
 }

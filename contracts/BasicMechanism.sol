@@ -18,6 +18,9 @@ contract BasicMechanism is DrugSupplyChain {
         if (!handlingAddresses.hasRole(MANUFACTURER_ROLE, msg.sender)) {
             revert("Its not Manufacturer");
         }
+        if (!handlingAddresses.hasRole(MANUFACTURER_ROLE, manufacturer)) {
+            revert("Manufacturer address is not registered");
+        }
         if (manufacturer == address(0)) {
             revert("Manufacturer address cannot be zero");
         }
@@ -35,7 +38,7 @@ contract BasicMechanism is DrugSupplyChain {
         uint256 expiryDate,
         uint256 price,
         address ipfsHash
-    ) internal {
+    ) internal returns (Batch memory) {
         Batch memory newBatch;
         newBatch.statusEnum = BatchStatus.Manufactured;
         newBatch.timestamp = block.timestamp;
@@ -56,9 +59,11 @@ contract BasicMechanism is DrugSupplyChain {
                 idx // Using batchCount to ensure uniqueness
             )
         );
-
+        allBatchIds.push(newBatch.batchId);
         //Storing the batch in the mapping
         batchIdToBatch[newBatch.batchId] = newBatch;
+        ownerToBatches[manufacturer].push(newBatch.batchId);
+
         //This event is for frontend to know about the batch creation and details wiht this we can generate a QR code for Information
         emit BatchCreated(newBatch.batchId, newBatch.timestamp);
         //Now the batch is created and ready to be listed for distributers to buy
@@ -69,14 +74,20 @@ contract BasicMechanism is DrugSupplyChain {
         uint256 expiryDate,
         uint256 price,
         address ipfsHash
-    ) public notFrozen {
+    ) public notFrozen returns (Batch memory) {
         checkDataReceived(manufacturer, expiryDate, price);
-        updatingParams(manufacturer, expiryDate, price, ipfsHash);
+        Batch memory newBatch = updatingParams(
+            manufacturer,
+            expiryDate,
+            price,
+            ipfsHash
+        );
         //Generating QR code for the batch
         //This can be done offchain and stored in IPFS or any other decentralized storage system
         //The QR code can contain the batchId, drugName, productQuantity, manufacturer address,
         //expiryDate, price and status of the batch
         //This QR code can be scanned by the distributor
+        return newBatch;
     }
 
     function distributorBuyingChecks(
@@ -127,7 +138,7 @@ contract BasicMechanism is DrugSupplyChain {
         //Updating the batch details
         batchIdToBatch[_batchId].timestamp = block.timestamp;
         batchIdToBatch[_batchId].distributor = msg.sender;
-
+        ownerToBatches[msg.sender].push(_batchId);
         batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByDistributor;
 
         emit DistributerPurchased(
@@ -180,6 +191,8 @@ contract BasicMechanism is DrugSupplyChain {
         //Updations to be done for retailer
         batchIdToBatch[_batchId].timestamp = block.timestamp;
         batchIdToBatch[_batchId].retailer = msg.sender;
+        ownerToBatches[msg.sender].push(_batchId);
+
         batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
         //Updation in QR code to be done as well
         //The QR code should now contain the retailer's address as well

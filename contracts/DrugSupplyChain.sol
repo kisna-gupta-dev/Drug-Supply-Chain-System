@@ -42,10 +42,14 @@ contract DrugSupplyChain is HandlingAddresses {
 
     /// @notice Mapping to track return requests for batches
     mapping(bytes32 => ReturnRequest) public returnRequests;
-
+    
+    ///@notice Mapping to track owners to their batched
+    mapping(address => bytes32[]) public ownerToBatches;
+    
     /// @notice Array to store pending return requests
     ReturnRequest[] public pendingRequests;
-
+    ///@notice All BatchUIDs
+    bytes32[] public allBatchIds;
     /// @notice Counter for the number of batches created
     uint256 public batchCount;
 
