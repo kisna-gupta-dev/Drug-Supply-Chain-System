@@ -63,9 +63,10 @@ contract BasicMechanism is DrugSupplyChain {
         //Storing the batch in the mapping
         batchIdToBatch[newBatch.batchId] = newBatch;
         ownerToBatches[manufacturer].push(newBatch.batchId);
-
+        
         //This event is for frontend to know about the batch creation and details wiht this we can generate a QR code for Information
         emit BatchCreated(newBatch.batchId, newBatch.timestamp);
+        return newBatch;
         //Now the batch is created and ready to be listed for distributers to buy
     }
 
