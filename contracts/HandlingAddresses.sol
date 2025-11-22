@@ -126,9 +126,19 @@ contract HandlingAddresses is AccessControl {
 
     ///@notice Function to check if an address has a role
     function checkRole(
-        bytes32 role,
+        string memory roleName,
         address account
     ) public view returns (bool) {
+        bytes32 role;
+        if(keccak256(bytes(roleName)) == keccak256("MANUFACTURER_ROLE")){
+            role = MANUFACTURER_ROLE;
+        } else if(keccak256(bytes(roleName)) == keccak256("DISTRIBUTOR_ROLE")){
+            role = DISTRIBUTOR_ROLE;
+        } else if(keccak256(bytes(roleName)) == keccak256("RETAILER_ROLE")){
+            role = RETAILER_ROLE;
+        } else {
+            revert("Invalid role name");
+        }
         return hasRole(role, account);
     }
 }
