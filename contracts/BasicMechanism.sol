@@ -262,4 +262,8 @@ contract BasicMechanism is DrugSupplyChain {
         }
         return batchIdToBatch[_batchId].ipfsHash;
     }
+    
+    function getOwnerBatches(address owner) public view returns (bytes32[] memory) {
+        return ownerToBatches[owner];
+    }
 }
