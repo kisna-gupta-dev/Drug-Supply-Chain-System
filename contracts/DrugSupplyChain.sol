@@ -233,7 +233,7 @@ contract DrugSupplyChain is HandlingAddresses {
             revert InvalidAmount(_usdAmount);
         }
 
-        uint256 amountEth = (_usdAmount * 1e8) / price;
+        uint256 amountEth = (_usdAmount * 1e26) / price;
         return amountEth;
     }
 
