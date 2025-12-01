@@ -63,7 +63,7 @@ contract BasicMechanism is DrugSupplyChain {
         //Storing the batch in the mapping
         batchIdToBatch[newBatch.batchId] = newBatch;
         ownerToBatches[manufacturer].push(newBatch.batchId);
-        
+
         //This event is for frontend to know about the batch creation and details wiht this we can generate a QR code for Information
         emit BatchCreated(newBatch.batchId, newBatch.timestamp);
         return newBatch;
@@ -127,7 +127,7 @@ contract BasicMechanism is DrugSupplyChain {
 
         require(msg.value >= batchIdToBatch[_batchId].price, "Less Price Sent");
         //Escrow Contract to handle the payment
-        escrowContract.buy{value: msg.value}(
+        escrowContract.buy{value: calculateEthfromUSD(msg.value)}(
             msg.sender,
             batchIdToBatch[_batchId].manufacturer
         );
@@ -184,7 +184,7 @@ contract BasicMechanism is DrugSupplyChain {
         retailerBuyingChecks(_batchId);
 
         //Escrow Contract to handle the payment
-        escrowContract.buy{value: msg.value}(
+        escrowContract.buy{value: calculateEthfromUSD(msg.value)}(
             msg.sender,
             batchIdToBatch[_batchId].distributor
         );
@@ -217,7 +217,7 @@ contract BasicMechanism is DrugSupplyChain {
             batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
             escrowContract.release(
                 batchIdToBatch[_batchId].distributor,
-                batchIdToBatch[_batchId].productPrice
+                calculateEthfromUSD(batchIdToBatch[_batchId].productPrice)
             );
         } else {
             revert("Unauthorized to mark this batch as received");
@@ -237,7 +237,7 @@ contract BasicMechanism is DrugSupplyChain {
                 .OwnedByDistributor;
             escrowContract.release(
                 batchIdToBatch[_batchId].manufacturer,
-                batchIdToBatch[_batchId].price
+                calculateEthfromUSD(batchIdToBatch[_batchId].price)
             );
         } else {
             revert("Unauthorized to mark this batch as received");
@@ -262,8 +262,10 @@ contract BasicMechanism is DrugSupplyChain {
         }
         return batchIdToBatch[_batchId].ipfsHash;
     }
-    
-    function getOwnerBatches(address owner) public view returns (bytes32[] memory) {
+
+    function getOwnerBatches(
+        address owner
+    ) public view returns (bytes32[] memory) {
         return ownerToBatches[owner];
     }
 }

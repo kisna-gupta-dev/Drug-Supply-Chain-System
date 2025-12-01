@@ -79,7 +79,7 @@ contract HandlingRequests is DrugSupplyChain {
         returnRequests[_batchId].refunded = true;
         to = batchIdToBatch[_batchId].manufacturer;
 
-        escrowContract.release(to, batchIdToBatch[_batchId].price);
+        escrowContract.release(to, (calculateEthfromUSD(batchIdToBatch[_batchId].price)));
         removePendingRequest(_batchId);
         delete returnRequests[_batchId];
         emit Refunded(
