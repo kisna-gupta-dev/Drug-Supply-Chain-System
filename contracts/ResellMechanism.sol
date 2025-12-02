@@ -83,7 +83,7 @@ contract ResellMechanism is DrugSupplyChain {
         }
 
         // Transfer the payment to the distributor
-        escrowContract.buy{value: calculateEthfromUSD(msg.value)}(
+        escrowContract.buy{value: msg.value}(
             msg.sender,
             batchIdToBatch[_batchId].distributor
         );

@@ -127,7 +127,7 @@ contract BasicMechanism is DrugSupplyChain {
 
         require(msg.value >= batchIdToBatch[_batchId].price, "Less Price Sent");
         //Escrow Contract to handle the payment
-        escrowContract.buy{value: calculateEthfromUSD(msg.value)}(
+        escrowContract.buy{value: msg.value}(
             msg.sender,
             batchIdToBatch[_batchId].manufacturer
         );
@@ -184,7 +184,7 @@ contract BasicMechanism is DrugSupplyChain {
         retailerBuyingChecks(_batchId);
 
         //Escrow Contract to handle the payment
-        escrowContract.buy{value: calculateEthfromUSD(msg.value)}(
+        escrowContract.buy{value: msg.value}(
             msg.sender,
             batchIdToBatch[_batchId].distributor
         );
@@ -217,7 +217,7 @@ contract BasicMechanism is DrugSupplyChain {
             batchIdToBatch[_batchId].statusEnum = BatchStatus.OwnedByRetailer;
             escrowContract.release(
                 batchIdToBatch[_batchId].distributor,
-                calculateEthfromUSD(batchIdToBatch[_batchId].productPrice)
+                batchIdToBatch[_batchId].productPrice
             );
         } else {
             revert("Unauthorized to mark this batch as received");
@@ -237,7 +237,7 @@ contract BasicMechanism is DrugSupplyChain {
                 .OwnedByDistributor;
             escrowContract.release(
                 batchIdToBatch[_batchId].manufacturer,
-                calculateEthfromUSD(batchIdToBatch[_batchId].price)
+                batchIdToBatch[_batchId].price
             );
         } else {
             revert("Unauthorized to mark this batch as received");
@@ -267,5 +267,9 @@ contract BasicMechanism is DrugSupplyChain {
         address owner
     ) public view returns (bytes32[] memory) {
         return ownerToBatches[owner];
+    }
+
+    function getAllBatches() public view returns (bytes32[] memory){
+        return allBatchIds;
     }
 }

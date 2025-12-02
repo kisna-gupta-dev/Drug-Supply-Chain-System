@@ -224,7 +224,7 @@ contract DrugSupplyChain is HandlingAddresses {
      */
     function calculateEthfromUSD(
         uint256 _usdAmount
-    ) internal view returns (uint256) {
+    ) public view returns (uint256) {
         uint256 price = getDataFeedLatestAnswer();
         if (price <= 0) {
             revert("Invalid price feed data");
